@@ -1,0 +1,84 @@
+{
+	"name": "bom-manager",
+	"uuid": "9444a4f933fc4431be2afd2298d20082",
+	"displayName": "物料管理助手",
+	"description": "针对不同项目使用的多种型号的物料种类及其数目进行管理",
+	"version": "1.0.9",
+	"publisher": "cube",
+	"engines": {
+		"eda": "^2.3.0"
+	},
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "extension-store",
+		"url": ""
+	},
+	"categories": "Other",
+	"keywords": [
+		"SDK"
+	],
+	"images": {
+		"logo": "./images/logo.png"
+	},
+	"homepage": "https://pro.lceda.cn",
+	"bugs": "https://lceda.cn/page/feedback?originPage=other",
+	"activationEvents": {},
+	"entry": "./dist/index",
+	"dependentExtensions": {},
+	"headerMenus": {
+		"home": [
+			{
+				"id": "BOM Manager",
+				"title": "物料管理助手",
+				"menuItems": [
+					{
+						"id": "OpenBomManager",
+						"title": "打开物料管理助手",
+						"registerFn": "openBomManager"
+					},
+					{
+						"id": "About",
+						"title": "关于...",
+						"registerFn": "about"
+					}
+				]
+			}
+		],
+		"sch": [
+			{
+				"id": "BOM Manager",
+				"title": "物料管理助手",
+				"menuItems": [
+					{
+						"id": "OpenBomManager",
+						"title": "打开物料管理助手",
+						"registerFn": "openBomManager"
+					},
+					{
+						"id": "About",
+						"title": "关于...",
+						"registerFn": "about"
+					}
+				]
+			}
+		],
+		"pcb": [
+			{
+				"id": "BOM Manager",
+				"title": "物料管理助手",
+				"menuItems": [
+					{
+						"id": "OpenBomManager",
+						"title": "打开物料管理助手",
+						"registerFn": "openBomManager"
+					},
+					{
+						"id": "About",
+						"title": "关于...",
+						"registerFn": "about"
+					}
+				]
+			}
+		]
+	}
+}
