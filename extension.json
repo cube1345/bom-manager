@@ -3,7 +3,7 @@
 	"uuid": "9444a4f933fc4431be2afd2298d20082",
 	"displayName": "物料管理助手",
 	"description": "针对不同项目使用的多种型号的物料种类及其数目进行管理",
-	"version": "1.0.9",
+	"version": "1.1.0",
 	"publisher": "cube",
 	"engines": {
 		"eda": "^2.3.0"
@@ -14,14 +14,12 @@
 		"url": ""
 	},
 	"categories": "Other",
-	"keywords": [
-		"SDK"
-	],
+	"keywords": ["SDK"],
 	"images": {
 		"logo": "./images/logo.png"
 	},
-	"homepage": "https://pro.lceda.cn",
-	"bugs": "https://lceda.cn/page/feedback?originPage=other",
+	"homepage": "",
+	"bugs": "",
 	"activationEvents": {},
 	"entry": "./dist/index",
 	"dependentExtensions": {},

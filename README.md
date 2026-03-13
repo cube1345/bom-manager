@@ -1,5 +1,7 @@
 [简体中文](#)
 
+# 使用方法
+
 # 物料管理助手（BOM Manager）
 
 面向硬件团队的 BOM 管理插件，运行在 **嘉立创 EDA 专业版** 扩展环境中：在插件内打开一个内联窗口（IFrame），完成类型、元器件、采购记录、项目、PCB 与 BOM 的统一维护，并提供导入导出能力。
@@ -15,6 +17,28 @@
 - 店铺评价：维护平台店铺评分、参考价格、邮费、主卖品与备注。
 - 导入导出：支持导入 `JSON/CSV/XLSX`；支持导出 `JSON/Excel(.xlsx)`。
 - 偏好设置：中英文切换、亮色/暗色主题切换。
+
+## 功能演示
+
+> 以下 GIF 均来自本仓库 [`./images/`](./images/) 目录。
+
+### 类型新增演示
+
+<p align="center">
+  <img src="./images/类型的新增演示.gif" alt="类型的新增演示" width="960" />
+</p>
+
+### 元器件新增及库存修改演示
+
+<p align="center">
+  <img src="./images/元器件新增及库存修改演示.gif" alt="元器件新增及库存修改演示" width="960" />
+</p>
+
+### PCB 项目管理及 BOM 管理演示
+
+<p align="center">
+  <img src="./images/PCB项目管理及BOM管理.gif" alt="PCB项目管理及BOM管理" width="960" />
+</p>
 
 ## 使用方式
 

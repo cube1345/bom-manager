@@ -167,20 +167,41 @@ export async function openBomManager(): Promise<void> {
 		return { promise, cancel };
 	};
 
+	const waitForIframeBootTs = async (minTs: number, msTimeout: number) => {
+		const start = Date.now();
+		while (Date.now() - start < msTimeout) {
+			try {
+				const value = (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot-ts');
+				const ts = typeof value === 'number' ? value : typeof value?.ts === 'number' ? value.ts : 0;
+				if (ts && ts >= minTs) {
+					return true;
+				}
+			} catch {}
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		return false;
+	};
+
 	let lastError: unknown = null;
 	for (const attempt of attempts) {
 		try {
 			await closeIfExists();
+			const requestTs = Date.now();
+			try {
+				await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
+			} catch {}
+
 			const ready = waitForIframeReady(2500);
 			const ok = await attempt.run();
 			const opened = ok || (ok === false && (await isActuallyOpened()));
-			const booted = opened ? true : await ready.promise;
+			const busBooted = opened ? true : await ready.promise;
+			const storageBooted = opened ? true : await waitForIframeBootTs(requestTs, 3000);
 			ready.cancel();
 
-			if (opened || booted) {
+			if (opened || busBooted || storageBooted) {
 				try {
 					eda.sys_Log?.add?.(
-						`openBomManager ok via ${attempt.label} (ok=${String(ok)} opened=${String(opened)} booted=${String(booted)})`,
+						`openBomManager ok via ${attempt.label} (ok=${String(ok)} opened=${String(opened)} busBooted=${String(busBooted)} storageBooted=${String(storageBooted)})`,
 						'info' as any,
 					);
 				} catch {}

@@ -18,6 +18,12 @@
 	}
 
 	try {
+		// Notify the extension entry that the iframe app has booted.
+		// Storage is more reliable than MessageBus across some client builds.
+		if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
+			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot-ts', Date.now());
+		}
+
 		if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === 'function') {
 			edaApi.sys_MessageBus.publish('bom-manager-ready', { ts: Date.now() });
 		}
