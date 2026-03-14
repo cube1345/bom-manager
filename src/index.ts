@@ -294,6 +294,106 @@ export async function openBomManager(): Promise<void> {
 	);
 }
 
+export async function selfCheck(): Promise<void> {
+	const envInfo = (() => {
+		try {
+			const env = (eda as any)?.sys_Environment;
+			return {
+				isClient: env?.isClient?.() ?? undefined,
+				isWeb: env?.isWeb?.() ?? undefined,
+				isOnlineMode: env?.isOnlineMode?.() ?? undefined,
+				isHalfOfflineMode: env?.isHalfOfflineMode?.() ?? undefined,
+				isOfflineMode: env?.isOfflineMode?.() ?? undefined,
+				editorVersion: env?.getEditorCurrentVersion?.() ?? '',
+				compiledDate: env?.getEditorCompliedDate?.() ?? '',
+			};
+		} catch {
+			return {
+				isClient: undefined,
+				isWeb: undefined,
+				isOnlineMode: undefined,
+				isHalfOfflineMode: undefined,
+				isOfflineMode: undefined,
+				editorVersion: '',
+				compiledDate: '',
+			};
+		}
+	})();
+
+	const has = (value: unknown) => (value ? 'yes' : 'no');
+
+	const apiInfo = (() => {
+		const fsApi = (eda as any)?.sys_FileSystem;
+		const iframeApi = (eda as any)?.sys_IFrame;
+		const storageApi = (eda as any)?.sys_Storage;
+		const logApi = (eda as any)?.sys_Log;
+		const dialogApi = (eda as any)?.sys_Dialog;
+		return {
+			sys_FileSystem: has(fsApi),
+			getExtensionFile: has(fsApi && typeof fsApi.getExtensionFile === 'function'),
+			openReadFileDialog: has(fsApi && typeof fsApi.openReadFileDialog === 'function'),
+			saveFile: has(fsApi && typeof fsApi.saveFile === 'function'),
+			sys_IFrame: has(iframeApi),
+			openIFrame: has(iframeApi && typeof iframeApi.openIFrame === 'function'),
+			closeIFrame: has(iframeApi && typeof iframeApi.closeIFrame === 'function'),
+			hideIFrame: has(iframeApi && typeof iframeApi.hideIFrame === 'function'),
+			showIFrame: has(iframeApi && typeof iframeApi.showIFrame === 'function'),
+			sys_Storage: has(storageApi),
+			getExtensionUserConfig: has(storageApi && typeof storageApi.getExtensionUserConfig === 'function'),
+			setExtensionUserConfig: has(storageApi && typeof storageApi.setExtensionUserConfig === 'function'),
+			sys_Log: has(logApi),
+			sys_Dialog: has(dialogApi),
+		};
+	})();
+
+	const fileChecks = await (async () => {
+		const fsApi = (eda as any)?.sys_FileSystem;
+		if (!fsApi || typeof fsApi.getExtensionFile !== 'function') {
+			return {
+				'/iframe/index.html': 'n/a',
+				'/iframe/index.abs.html': 'n/a',
+				'/iframe/app.js': 'n/a',
+				'/iframe/styles.css': 'n/a',
+				'/dist/index.js': 'n/a',
+			} as Record<string, string>;
+		}
+		const targets = ['/iframe/index.html', '/iframe/index.abs.html', '/iframe/app.js', '/iframe/styles.css', '/dist/index.js'] as const;
+		const results = await Promise.all(
+			targets.map(async (uri) => {
+				try {
+					const file = await fsApi.getExtensionFile(uri);
+					return [uri, file ? 'ok' : 'missing'] as const;
+				} catch (e) {
+					return [uri, `error(${e instanceof Error ? e.message : String(e)})`] as const;
+				}
+			}),
+		);
+		return Object.fromEntries(results) as Record<(typeof targets)[number], string>;
+	})();
+
+	const lines: string[] = [];
+	lines.push(`[物料管理助手 SelfCheck] v${extensionConfig.version}`);
+	lines.push(`env: isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}`);
+	lines.push(
+		`mode: online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}`,
+	);
+	lines.push(`eda: version=${envInfo.editorVersion || '未知'} compiledDate=${envInfo.compiledDate || '未知'}`);
+	lines.push('api:');
+	for (const [k, v] of Object.entries(apiInfo)) lines.push(`  - ${k}: ${v}`);
+	lines.push('resources:');
+	for (const [k, v] of Object.entries(fileChecks)) lines.push(`  - ${k}: ${v}`);
+
+	const report = lines.join('\n');
+	try {
+		eda.sys_Log?.add?.(report, 'info' as any);
+	} catch {}
+
+	eda.sys_Dialog.showInformationMessage(
+		`${report}\n\n说明：\n- resources=missing 通常表示打包时未包含该文件（或路径解析不兼容）。\n- 若 openIFrame=yes 但仍无法渲染，多数是宿主版本兼容性问题，建议升级 EDA 后再测。`,
+		'环境自检',
+	);
+}
+
 export function about(): void {
 	eda.sys_Dialog.showInformationMessage(
 		`物料管理助手 v${extensionConfig.version}\n\n已迁移为嘉立创 EDA 插件内联应用，可在插件窗口中管理类型、元器件、采购记录、项目、PCB 与 BOM。`,
