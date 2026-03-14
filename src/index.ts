@@ -57,30 +57,36 @@ export async function openBomManager(): Promise<void> {
 		return;
 	}
 
-	const isActuallyOpened = async (): Promise<boolean> => {
-		try {
-			if (typeof (eda as any)?.sys_IFrame?.hideIFrame !== 'function' || typeof (eda as any)?.sys_IFrame?.showIFrame !== 'function') {
-				return false;
-			}
-			const hidden = await (eda as any).sys_IFrame.hideIFrame(BOM_IFRAME_ID);
-			if (!hidden) return false;
-			await (eda as any).sys_IFrame.showIFrame(BOM_IFRAME_ID);
-			return true;
-		} catch {
-			return false;
+	// In some clients openIFrame() returns false even when the dialog was created.
+	// Boot receipt in sys_Storage is the most reliable signal for "rendered".
+	const waitForIframeBootTs = async (minTs: number, msTimeout: number) => {
+		const start = Date.now();
+		while (Date.now() - start < msTimeout) {
+			try {
+				const value = (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot-ts');
+				const ts = typeof value === 'number' ? value : typeof value?.ts === 'number' ? value.ts : 0;
+				if (ts && ts >= minTs) return true;
+			} catch {}
+			await new Promise((r) => setTimeout(r, 120));
 		}
+		return false;
 	};
 
-	// Match the stable behavior of earlier builds: keep attempts few and avoid slow resource checks.
-	// In some clients openIFrame() returns false even when the dialog was created.
+	// Keep the open path close to the known-good v1.1.4 behavior:
+	// use the 3-args signature first (best compatibility), then confirm via boot receipt.
 	const tryOpen = async (html: string): Promise<boolean> => {
 		try {
-			const ok = await (eda as any).sys_IFrame.openIFrame(html, 1600, 980, BOM_IFRAME_ID);
-			if (ok) return true;
-			if (await isActuallyOpened()) return true;
-			return false;
+			const requestTs = Date.now();
+			try {
+				await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
+			} catch {}
+
+			const ok = await (eda as any).sys_IFrame.openIFrame(html, 1600, 980);
+			if (ok === true) return true;
+
+			// If returned false, still consider success if the iframe app boots quickly.
+			return await waitForIframeBootTs(requestTs, 2000);
 		} catch {
-			if (await isActuallyOpened()) return true;
 			return false;
 		}
 	};
