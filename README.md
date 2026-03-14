@@ -26,21 +26,15 @@
 
 ### 类型新增演示
 
-<p align="center">
-  <img src="./images/类型的新增演示.gif" alt="类型的新增演示" width="960" />
-</p>
+![类型的新增演示](./images/%E7%B1%BB%E5%9E%8B%E7%9A%84%E6%96%B0%E5%A2%9E%E6%BC%94%E7%A4%BA.gif)
 
 ### 元器件新增及库存修改演示
 
-<p align="center">
-  <img src="./images/元器件新增及库存修改演示.gif" alt="元器件新增及库存修改演示" width="960" />
-</p>
+![元器件新增及库存修改演示](./images/%E5%85%83%E5%99%A8%E4%BB%B6%E6%96%B0%E5%A2%9E%E5%8F%8A%E5%BA%93%E5%AD%98%E4%BF%AE%E6%94%B9%E6%BC%94%E7%A4%BA.gif)
 
 ### PCB 项目管理及 BOM 管理演示
 
-<p align="center">
-  <img src="./images/PCB项目管理及BOM管理.gif" alt="PCB项目管理及BOM管理" width="960" />
-</p>
+![PCB项目管理及BOM管理](./images/PCB%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86%E5%8F%8ABOM%E7%AE%A1%E7%90%86.gif)
 
 ## 使用方式
 
