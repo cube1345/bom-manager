@@ -290,7 +290,7 @@
 		return idValue ? state.db[name].find((item) => item.id === idValue) || null : null;
 	}
 	function header() {
-		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'BOM Manager'))}</h1><p class="hero-copy">${e(t('在插件窗口中统一维护类型、元器件、采购记录、项目、PCB 与 BOM。', 'Manage types, components, purchase records, projects, PCB and BOM in one place.'))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button></div></header>`;
+		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'BOM Manager'))}</h1><p class="hero-copy">${e(t('在插件窗口中统一维护类型、元器件、采购记录、项目、PCB 与 BOM。', 'Manage types, components, purchase records, projects, PCB and BOM in one place.'))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="import-eda-bom">${e(t('从当前工程导入 BOM', 'Import BOM from EDA'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button></div></header>`;
 	}
 	function nav() {
 		const items = [['dashboard', '概览', 'Overview'], ['components', '元器件', 'Components'], ['types', '类型', 'Types'], ['projects', '项目/PCB', 'Projects/PCB'], ['purchase', '采购清单', 'Purchase'], ['stores', '店铺', 'Stores'], ['settings', '设置', 'Settings']];
@@ -1154,6 +1154,230 @@
 		throw new Error(t('当前插件版本支持导入 JSON/CSV/XLSX。', 'This build supports JSON/CSV/XLSX import.'));
 	}
 
+	function normalizeHeaderKey(input) {
+		return String(input || '').trim().toLowerCase().replace(/[\s_\-\/()\[\]#]+/g, '');
+	}
+
+	function findHeader(headers, candidates) {
+		const normHeaders = headers.map((h) => ({ raw: h, key: normalizeHeaderKey(h) }));
+		const candKeys = candidates.map(normalizeHeaderKey).filter(Boolean);
+		for (const cand of candKeys) {
+			const hit = normHeaders.find((h) => h.key === cand) || normHeaders.find((h) => h.key.includes(cand) || cand.includes(h.key));
+			if (hit) return hit.raw;
+		}
+		return '';
+	}
+
+	function splitDelimitedLine(line, delimiter) {
+		const result = [];
+		let current = '';
+		let quoted = false;
+		for (let i = 0; i < line.length; i += 1) {
+			const ch = line[i];
+			if (ch === '"') {
+				if (quoted && line[i + 1] === '"') {
+					current += '"';
+					i += 1;
+				} else {
+					quoted = !quoted;
+				}
+				continue;
+			}
+			if (!quoted && ch === delimiter) {
+				result.push(current);
+				current = '';
+				continue;
+			}
+			current += ch;
+		}
+		result.push(current);
+		return result.map((x) => String(x ?? '').trim());
+	}
+
+	function detectDelimiter(firstLine) {
+		const s = String(firstLine || '');
+		const comma = (s.match(/,/g) || []).length;
+		const tab = (s.match(/\t/g) || []).length;
+		const semi = (s.match(/;/g) || []).length;
+		if (tab >= comma && tab >= semi && tab > 0) return '\t';
+		if (semi >= comma && semi > 0) return ';';
+		return ',';
+	}
+
+	function parseDelimitedTable(text) {
+		const lines = String(text || '').split(/\r?\n/).filter((l) => l.trim().length > 0);
+		if (lines.length < 2) return [];
+		const delimiter = detectDelimiter(lines[0]);
+		const headers = splitDelimitedLine(lines[0], delimiter);
+		return lines.slice(1).map((line) => {
+			const values = splitDelimitedLine(line, delimiter);
+			const row = {};
+			for (let i = 0; i < headers.length; i += 1) row[headers[i]] = values[i] || '';
+			return row;
+		});
+	}
+
+	async function importEdaBomFromCurrent(): Promise<void> {
+		const pcbApi = edaApi?.pcb_ManufactureData;
+		const schApi = edaApi?.sch_ManufactureData;
+		const getBomFile =
+			pcbApi && typeof pcbApi.getBomFile === 'function'
+				? pcbApi.getBomFile.bind(pcbApi)
+				: schApi && typeof schApi.getBomFile === 'function'
+					? schApi.getBomFile.bind(schApi)
+					: null;
+		if (!getBomFile) {
+			throw new Error(t('当前 EDA 版本未提供生产资料 BOM 导出接口（pcb_ManufactureData/sch_ManufactureData）。', 'Manufacture BOM API not available.'));
+		}
+
+		setStatus('info', t('正在从当前工程生成 BOM 文件...', 'Generating BOM file from current design...'));
+		render();
+
+		const bomFile = await getBomFile('eda-bom', 'csv');
+		if (!bomFile) {
+			throw new Error(t('未获取到 BOM 文件。请确认当前已打开 PCB/原理图工程后重试。', 'No BOM file returned. Open a design and retry.'));
+		}
+
+		const text = await bomFile.text();
+		const rows = parseDelimitedTable(text);
+		if (!rows.length) {
+			throw new Error(t('BOM 文件为空或无法解析。', 'BOM file is empty or cannot be parsed.'));
+		}
+
+		const headers = Object.keys(rows[0] || {});
+		const qtyHeader = findHeader(headers, ['Quantity', 'Qty', '数量', '用量', 'QTY']);
+		const modelHeader = findHeader(headers, [
+			'LCSC Part',
+			'LCSC Part#',
+			'LCSC Part #',
+			'LCSC',
+			'JLC Part',
+			'JLCPCB Part',
+			'Supplier Part',
+			'Part Number',
+			'MPN',
+			'Manufacturer Part',
+			'Manufacturer Part Number',
+			'Model',
+			'型号',
+			'Comment',
+			'Value',
+			'Name',
+		]);
+		const typeHeader = findHeader(headers, ['Category', 'Type', '分类', '类型']);
+		const refHeader = findHeader(headers, ['Designator', 'Reference', 'RefDes', '位号', '标号']);
+		const footprintHeader = findHeader(headers, ['Footprint', 'Package', '封装']);
+		const descHeader = findHeader(headers, ['Description', 'Desc', '描述', '说明']);
+
+		if (!qtyHeader || !modelHeader) {
+			throw new Error(
+				t(
+					`无法识别 BOM 关键列（数量/型号）。已识别列：${headers.join('、')}`,
+					`Cannot find key BOM columns (qty/model). Headers: ${headers.join(', ')}`,
+				),
+			);
+		}
+
+		const num = (input) => {
+			const n = Number(String(input || '').trim().replaceAll(/[, ]+/g, ''));
+			return Number.isFinite(n) ? n : 0;
+		};
+
+		// Group by model (case-insensitive) and typeName.
+		const grouped = new Map();
+		for (const row of rows) {
+			const qty = num(row[qtyHeader]);
+			const model = String(row[modelHeader] || '').trim();
+			if (!model || qty <= 0) continue;
+			const typeName = typeHeader ? String(row[typeHeader] || '').trim() : '';
+			const key = `${(typeName || 'EDA导入').toLowerCase()}::${model.toLowerCase()}`;
+			if (!grouped.has(key)) {
+				grouped.set(key, {
+					typeName: typeName || 'EDA导入',
+					model,
+					qty: 0,
+					ref: new Set(),
+					footprint: new Set(),
+					desc: new Set(),
+				});
+			}
+			const item = grouped.get(key);
+			item.qty += qty;
+			if (refHeader && row[refHeader]) item.ref.add(String(row[refHeader]).trim());
+			if (footprintHeader && row[footprintHeader]) item.footprint.add(String(row[footprintHeader]).trim());
+			if (descHeader && row[descHeader]) item.desc.add(String(row[descHeader]).trim());
+		}
+
+		if (!grouped.size) {
+			throw new Error(t('BOM 中未发现有效行（型号或数量为空）。', 'No valid BOM lines found.'));
+		}
+
+		const now = new Date();
+		const nameSuffix = now.toLocaleString(locale(), { hour12: false });
+		const project = nProject({ id: id(), name: `EDA 导入 ${nameSuffix}`, note: t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.'), createdAt: iso(), updatedAt: iso() });
+		state.db.projects.push(project);
+		const pcb = nPcb({ id: id(), projectId: project.id, name: '当前工程 BOM', version: '', boardQuantity: 1, note: '', items: [], createdAt: iso(), updatedAt: iso() });
+		state.db.pcbs.push(pcb);
+
+		const ensureType = (typeName) => {
+			const name = String(typeName || '').trim() || 'EDA导入';
+			let type = state.db.types.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
+			if (!type) {
+				type = nType({ id: id(), name, primaryName: name.split('/')[0], secondaryName: name.split('/')[1] || '', createdAt: iso(), updatedAt: iso() });
+				state.db.types.push(type);
+			}
+			return type;
+		};
+
+		let createdComponents = 0;
+		let createdBomItems = 0;
+
+		for (const item of grouped.values()) {
+			const type = ensureType(item.typeName);
+			const model = String(item.model || '').trim();
+			if (!model) continue;
+
+			// Try to reuse existing component by model first (regardless of type), otherwise create under detected type.
+			let component =
+				state.db.components.find((entry) => entry.model.toLowerCase() === model.toLowerCase()) ||
+				state.db.components.find((entry) => entry.typeId === type.id && entry.model.toLowerCase() === model.toLowerCase());
+			if (!component) {
+				const auxParts = [];
+				if (item.footprint.size) auxParts.push(`${t('封装', 'Footprint')}: ${Array.from(item.footprint).join(' / ')}`);
+				if (item.desc.size) auxParts.push(`${t('描述', 'Description')}: ${Array.from(item.desc).join(' / ')}`);
+				if (item.ref.size) auxParts.push(`${t('位号', 'Ref')}: ${Array.from(item.ref).slice(0, 6).join(', ')}${item.ref.size > 6 ? ` (+${item.ref.size - 6})` : ''}`);
+
+				component = nComponent({
+					id: id(),
+					typeId: type.id,
+					model,
+					auxInfo: auxParts.join('\n'),
+					note: '',
+					warningThreshold: 0,
+					records: [],
+					createdAt: iso(),
+					updatedAt: iso(),
+				});
+				state.db.components.push(component);
+				createdComponents += 1;
+			}
+
+			const qtyPerBoard = Math.max(1, Math.round(Number(item.qty || 0)));
+			pcb.items.push(nBomItem({ id: id(), componentId: component.id, quantityPerBoard: qtyPerBoard, createdAt: iso(), updatedAt: iso() }));
+			createdBomItems += 1;
+		}
+
+		// Normalize + persist
+		state.db = nDb(state.db);
+		await saveDb();
+
+		state.view = 'projects';
+		state.projectFilter = project.id;
+		state.modal = { type: 'bom', pcbId: pcb.id };
+		setStatus('success', t(`已导入 BOM：新增 ${createdComponents} 个元器件，新增 ${createdBomItems} 条 BOM 明细。`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`));
+		render();
+	}
+
 	async function exportJson() {
 		await edaApi.sys_FileSystem.saveFile(new Blob([jsonText()], { type: 'application/json;charset=utf-8' }), 'bom-data.json');
 		setStatus('success', t('JSON 已导出。', 'JSON exported.'));
@@ -1640,6 +1864,7 @@
 				state.status = '';
 				if (action === 'view') { state.view = target.dataset.view || 'dashboard'; render(); return; }
 				if (action === 'import') return importData();
+				if (action === 'import-eda-bom') return importEdaBomFromCurrent();
 				if (action === 'export-json') return exportJson();
 				if (action === 'export-xlsx') return exportXlsx();
 				if (action === 'export-xls') return exportXlsx();
@@ -1698,4 +1923,3 @@
 
 	render();
 })();
-

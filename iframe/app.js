@@ -254,7 +254,7 @@
     return idValue ? state.db[name].find((item) => item.id === idValue) || null : null;
   }
   function header() {
-    return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t("\u7269\u6599\u7BA1\u7406\u52A9\u624B", "BOM Manager"))}</h1><p class="hero-copy">${e(t("\u5728\u63D2\u4EF6\u7A97\u53E3\u4E2D\u7EDF\u4E00\u7EF4\u62A4\u7C7B\u578B\u3001\u5143\u5668\u4EF6\u3001\u91C7\u8D2D\u8BB0\u5F55\u3001\u9879\u76EE\u3001PCB \u4E0E BOM\u3002", "Manage types, components, purchase records, projects, PCB and BOM in one place."))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t("\u5BFC\u5165", "Import"))}</button><button class="ghost-button" data-action="export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" data-action="export-xlsx">${e(t("\u5BFC\u51FA Excel(.xlsx)", "Export Excel (.xlsx)"))}</button></div></header>`;
+    return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t("\u7269\u6599\u7BA1\u7406\u52A9\u624B", "BOM Manager"))}</h1><p class="hero-copy">${e(t("\u5728\u63D2\u4EF6\u7A97\u53E3\u4E2D\u7EDF\u4E00\u7EF4\u62A4\u7C7B\u578B\u3001\u5143\u5668\u4EF6\u3001\u91C7\u8D2D\u8BB0\u5F55\u3001\u9879\u76EE\u3001PCB \u4E0E BOM\u3002", "Manage types, components, purchase records, projects, PCB and BOM in one place."))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t("\u5BFC\u5165", "Import"))}</button><button class="ghost-button" data-action="import-eda-bom">${e(t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u5BFC\u5165 BOM", "Import BOM from EDA"))}</button><button class="ghost-button" data-action="export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" data-action="export-xlsx">${e(t("\u5BFC\u51FA Excel(.xlsx)", "Export Excel (.xlsx)"))}</button></div></header>`;
   }
   function nav() {
     const items = [["dashboard", "\u6982\u89C8", "Overview"], ["components", "\u5143\u5668\u4EF6", "Components"], ["types", "\u7C7B\u578B", "Types"], ["projects", "\u9879\u76EE/PCB", "Projects/PCB"], ["purchase", "\u91C7\u8D2D\u6E05\u5355", "Purchase"], ["stores", "\u5E97\u94FA", "Stores"], ["settings", "\u8BBE\u7F6E", "Settings"]];
@@ -1072,6 +1072,197 @@
     }
     throw new Error(t("\u5F53\u524D\u63D2\u4EF6\u7248\u672C\u652F\u6301\u5BFC\u5165 JSON/CSV/XLSX\u3002", "This build supports JSON/CSV/XLSX import."));
   }
+  function normalizeHeaderKey(input) {
+    return String(input || "").trim().toLowerCase().replace(/[\s_\-\/()\[\]#]+/g, "");
+  }
+  function findHeader(headers, candidates) {
+    const normHeaders = headers.map((h) => ({ raw: h, key: normalizeHeaderKey(h) }));
+    const candKeys = candidates.map(normalizeHeaderKey).filter(Boolean);
+    for (const cand of candKeys) {
+      const hit = normHeaders.find((h) => h.key === cand) || normHeaders.find((h) => h.key.includes(cand) || cand.includes(h.key));
+      if (hit) return hit.raw;
+    }
+    return "";
+  }
+  function splitDelimitedLine(line, delimiter) {
+    const result = [];
+    let current = "";
+    let quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (quoted && line[i + 1] === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          quoted = !quoted;
+        }
+        continue;
+      }
+      if (!quoted && ch === delimiter) {
+        result.push(current);
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+    result.push(current);
+    return result.map((x) => String(x != null ? x : "").trim());
+  }
+  function detectDelimiter(firstLine) {
+    const s = String(firstLine || "");
+    const comma = (s.match(/,/g) || []).length;
+    const tab = (s.match(/\t/g) || []).length;
+    const semi = (s.match(/;/g) || []).length;
+    if (tab >= comma && tab >= semi && tab > 0) return "	";
+    if (semi >= comma && semi > 0) return ";";
+    return ",";
+  }
+  function parseDelimitedTable(text) {
+    const lines = String(text || "").split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) return [];
+    const delimiter = detectDelimiter(lines[0]);
+    const headers = splitDelimitedLine(lines[0], delimiter);
+    return lines.slice(1).map((line) => {
+      const values = splitDelimitedLine(line, delimiter);
+      const row = {};
+      for (let i = 0; i < headers.length; i += 1) row[headers[i]] = values[i] || "";
+      return row;
+    });
+  }
+  async function importEdaBomFromCurrent() {
+    const pcbApi = edaApi == null ? void 0 : edaApi.pcb_ManufactureData;
+    const schApi = edaApi == null ? void 0 : edaApi.sch_ManufactureData;
+    const getBomFile = pcbApi && typeof pcbApi.getBomFile === "function" ? pcbApi.getBomFile.bind(pcbApi) : schApi && typeof schApi.getBomFile === "function" ? schApi.getBomFile.bind(schApi) : null;
+    if (!getBomFile) {
+      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u672A\u63D0\u4F9B\u751F\u4EA7\u8D44\u6599 BOM \u5BFC\u51FA\u63A5\u53E3\uFF08pcb_ManufactureData/sch_ManufactureData\uFF09\u3002", "Manufacture BOM API not available."));
+    }
+    setStatus("info", t("\u6B63\u5728\u4ECE\u5F53\u524D\u5DE5\u7A0B\u751F\u6210 BOM \u6587\u4EF6...", "Generating BOM file from current design..."));
+    render();
+    const bomFile = await getBomFile("eda-bom", "csv");
+    if (!bomFile) {
+      throw new Error(t("\u672A\u83B7\u53D6\u5230 BOM \u6587\u4EF6\u3002\u8BF7\u786E\u8BA4\u5F53\u524D\u5DF2\u6253\u5F00 PCB/\u539F\u7406\u56FE\u5DE5\u7A0B\u540E\u91CD\u8BD5\u3002", "No BOM file returned. Open a design and retry."));
+    }
+    const text = await bomFile.text();
+    const rows = parseDelimitedTable(text);
+    if (!rows.length) {
+      throw new Error(t("BOM \u6587\u4EF6\u4E3A\u7A7A\u6216\u65E0\u6CD5\u89E3\u6790\u3002", "BOM file is empty or cannot be parsed."));
+    }
+    const headers = Object.keys(rows[0] || {});
+    const qtyHeader = findHeader(headers, ["Quantity", "Qty", "\u6570\u91CF", "\u7528\u91CF", "QTY"]);
+    const modelHeader = findHeader(headers, [
+      "LCSC Part",
+      "LCSC Part#",
+      "LCSC Part #",
+      "LCSC",
+      "JLC Part",
+      "JLCPCB Part",
+      "Supplier Part",
+      "Part Number",
+      "MPN",
+      "Manufacturer Part",
+      "Manufacturer Part Number",
+      "Model",
+      "\u578B\u53F7",
+      "Comment",
+      "Value",
+      "Name"
+    ]);
+    const typeHeader = findHeader(headers, ["Category", "Type", "\u5206\u7C7B", "\u7C7B\u578B"]);
+    const refHeader = findHeader(headers, ["Designator", "Reference", "RefDes", "\u4F4D\u53F7", "\u6807\u53F7"]);
+    const footprintHeader = findHeader(headers, ["Footprint", "Package", "\u5C01\u88C5"]);
+    const descHeader = findHeader(headers, ["Description", "Desc", "\u63CF\u8FF0", "\u8BF4\u660E"]);
+    if (!qtyHeader || !modelHeader) {
+      throw new Error(
+        t(
+          `\u65E0\u6CD5\u8BC6\u522B BOM \u5173\u952E\u5217\uFF08\u6570\u91CF/\u578B\u53F7\uFF09\u3002\u5DF2\u8BC6\u522B\u5217\uFF1A${headers.join("\u3001")}`,
+          `Cannot find key BOM columns (qty/model). Headers: ${headers.join(", ")}`
+        )
+      );
+    }
+    const num = (input) => {
+      const n = Number(String(input || "").trim().replaceAll(/[, ]+/g, ""));
+      return Number.isFinite(n) ? n : 0;
+    };
+    const grouped = /* @__PURE__ */ new Map();
+    for (const row of rows) {
+      const qty = num(row[qtyHeader]);
+      const model = String(row[modelHeader] || "").trim();
+      if (!model || qty <= 0) continue;
+      const typeName = typeHeader ? String(row[typeHeader] || "").trim() : "";
+      const key = `${(typeName || "EDA\u5BFC\u5165").toLowerCase()}::${model.toLowerCase()}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          typeName: typeName || "EDA\u5BFC\u5165",
+          model,
+          qty: 0,
+          ref: /* @__PURE__ */ new Set(),
+          footprint: /* @__PURE__ */ new Set(),
+          desc: /* @__PURE__ */ new Set()
+        });
+      }
+      const item = grouped.get(key);
+      item.qty += qty;
+      if (refHeader && row[refHeader]) item.ref.add(String(row[refHeader]).trim());
+      if (footprintHeader && row[footprintHeader]) item.footprint.add(String(row[footprintHeader]).trim());
+      if (descHeader && row[descHeader]) item.desc.add(String(row[descHeader]).trim());
+    }
+    if (!grouped.size) {
+      throw new Error(t("BOM \u4E2D\u672A\u53D1\u73B0\u6709\u6548\u884C\uFF08\u578B\u53F7\u6216\u6570\u91CF\u4E3A\u7A7A\uFF09\u3002", "No valid BOM lines found."));
+    }
+    const now = /* @__PURE__ */ new Date();
+    const nameSuffix = now.toLocaleString(locale(), { hour12: false });
+    const project = nProject({ id: id(), name: `EDA \u5BFC\u5165 ${nameSuffix}`, note: t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import."), createdAt: iso(), updatedAt: iso() });
+    state.db.projects.push(project);
+    const pcb = nPcb({ id: id(), projectId: project.id, name: "\u5F53\u524D\u5DE5\u7A0B BOM", version: "", boardQuantity: 1, note: "", items: [], createdAt: iso(), updatedAt: iso() });
+    state.db.pcbs.push(pcb);
+    const ensureType = (typeName) => {
+      const name = String(typeName || "").trim() || "EDA\u5BFC\u5165";
+      let type = state.db.types.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
+      if (!type) {
+        type = nType({ id: id(), name, primaryName: name.split("/")[0], secondaryName: name.split("/")[1] || "", createdAt: iso(), updatedAt: iso() });
+        state.db.types.push(type);
+      }
+      return type;
+    };
+    let createdComponents = 0;
+    let createdBomItems = 0;
+    for (const item of grouped.values()) {
+      const type = ensureType(item.typeName);
+      const model = String(item.model || "").trim();
+      if (!model) continue;
+      let component = state.db.components.find((entry) => entry.model.toLowerCase() === model.toLowerCase()) || state.db.components.find((entry) => entry.typeId === type.id && entry.model.toLowerCase() === model.toLowerCase());
+      if (!component) {
+        const auxParts = [];
+        if (item.footprint.size) auxParts.push(`${t("\u5C01\u88C5", "Footprint")}: ${Array.from(item.footprint).join(" / ")}`);
+        if (item.desc.size) auxParts.push(`${t("\u63CF\u8FF0", "Description")}: ${Array.from(item.desc).join(" / ")}`);
+        if (item.ref.size) auxParts.push(`${t("\u4F4D\u53F7", "Ref")}: ${Array.from(item.ref).slice(0, 6).join(", ")}${item.ref.size > 6 ? ` (+${item.ref.size - 6})` : ""}`);
+        component = nComponent({
+          id: id(),
+          typeId: type.id,
+          model,
+          auxInfo: auxParts.join("\n"),
+          note: "",
+          warningThreshold: 0,
+          records: [],
+          createdAt: iso(),
+          updatedAt: iso()
+        });
+        state.db.components.push(component);
+        createdComponents += 1;
+      }
+      const qtyPerBoard = Math.max(1, Math.round(Number(item.qty || 0)));
+      pcb.items.push(nBomItem({ id: id(), componentId: component.id, quantityPerBoard: qtyPerBoard, createdAt: iso(), updatedAt: iso() }));
+      createdBomItems += 1;
+    }
+    state.db = nDb(state.db);
+    await saveDb();
+    state.view = "projects";
+    state.projectFilter = project.id;
+    state.modal = { type: "bom", pcbId: pcb.id };
+    setStatus("success", t(`\u5DF2\u5BFC\u5165 BOM\uFF1A\u65B0\u589E ${createdComponents} \u4E2A\u5143\u5668\u4EF6\uFF0C\u65B0\u589E ${createdBomItems} \u6761 BOM \u660E\u7EC6\u3002`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`));
+    render();
+  }
   async function exportJson() {
     await edaApi.sys_FileSystem.saveFile(new Blob([jsonText()], { type: "application/json;charset=utf-8" }), "bom-data.json");
     setStatus("success", t("JSON \u5DF2\u5BFC\u51FA\u3002", "JSON exported."));
@@ -1568,6 +1759,7 @@
           return;
         }
         if (action === "import") return importData();
+        if (action === "import-eda-bom") return importEdaBomFromCurrent();
         if (action === "export-json") return exportJson();
         if (action === "export-xlsx") return exportXlsx();
         if (action === "export-xls") return exportXlsx();
