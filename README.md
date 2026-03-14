@@ -95,9 +95,9 @@ npm run build
 
 - 若打开窗口后出现类似 404 或页面空白，通常是宿主版本对 `openIFrame()` 以及 IFrame 资源路径解析存在兼容性问题。建议优先升级到更新的嘉立创 EDA 专业版。
 - IFrame 页面提供两种加载方式：
-  - `iframe/index.html` 使用相对路径加载 `./app.js`、`./styles.css`（更适合离线环境）。
-  - `iframe/index.abs.html` 使用绝对路径 `/iframe/app.js`、`/iframe/styles.css`（用于兼容部分旧版本）。
-  插件入口会自动按顺序尝试两种页面，无需联网。
+    - `iframe/index.html` 使用相对路径加载 `./app.js`、`./styles.css`（更适合离线环境）。
+    - `iframe/index.abs.html` 使用绝对路径 `/iframe/app.js`、`/iframe/styles.css`（用于兼容部分旧版本）。
+      插件入口会自动按顺序尝试两种页面，无需联网。
 
 ## 开源许可
 
