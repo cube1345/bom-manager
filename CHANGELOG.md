@@ -2,6 +2,18 @@
 
 > 注：本仓库在 `1.0.9` 后未单独发布 `1.0.10`，版本直接进入 `1.1.x` 分支。
 
+# 1.1.15
+
+## 新增
+
+1. 新增“整工程批量导入”能力：基于嘉立创官方 `dmt_Project.getCurrentProjectInfo()`、`dmt_Pcb.getAllPcbsInfo()`、`dmt_EditorControl.openDocument()/activateDocument()/closeDocument()` 与 `pcb_ManufactureData.getBomFile()`，可依次同步当前工程下全部 PCB 的 BOM。
+2. 新增“打开对应 PCB”按钮：对已关联宿主 `sourcePcbUuid` 的插件 PCB，可一键跳回嘉立创 EDA 中对应的 PCB 文档。
+
+## 变更
+
+1. 批量同步的工程/PCB 会写入来源工程 UUID、PCB UUID、板子名和导入时间，后续再次同步时会按来源 UUID 更新，而不再重复新增。
+2. 扩展“环境自检”输出：新增 `dmt_EditorControl`、`dmt_SelectControl`、`getAllPcbsInfo()`、`getAllBoardsInfo()`、`getCurrentDocumentInfo()` 等依赖能力检查。
+
 # 1.1.14
 
 ## 新增

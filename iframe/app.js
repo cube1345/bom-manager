@@ -203,13 +203,40 @@
     return { id: input.id || id(), typeId: input.typeId || "", model: String(input.model || "").trim(), auxInfo: String(input.auxInfo || "").trim(), note: String(input.note || "").trim(), warningThreshold: Number(input.warningThreshold || 0), records, totalQuantity, lowestPrice, createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
   }
   function nProject(input) {
-    return { id: input.id || id(), name: String(input.name || "").trim(), note: String(input.note || "").trim(), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
+    return {
+      id: input.id || id(),
+      name: String(input.name || "").trim(),
+      note: String(input.note || "").trim(),
+      sourceKind: input.sourceKind ? String(input.sourceKind).trim() : void 0,
+      sourceProjectUuid: input.sourceProjectUuid ? String(input.sourceProjectUuid).trim() : void 0,
+      sourceProjectName: input.sourceProjectName ? String(input.sourceProjectName).trim() : void 0,
+      sourceProjectFriendlyName: input.sourceProjectFriendlyName ? String(input.sourceProjectFriendlyName).trim() : void 0,
+      sourceImportedAt: input.sourceImportedAt ? String(input.sourceImportedAt).trim() : void 0,
+      createdAt: input.createdAt || iso(),
+      updatedAt: input.updatedAt || iso()
+    };
   }
   function nBomItem(input) {
     return { id: input.id || id(), componentId: input.componentId || "", quantityPerBoard: Number(input.quantityPerBoard || 0), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
   }
   function nPcb(input) {
-    return { id: input.id || id(), projectId: input.projectId || "", name: String(input.name || "").trim(), version: String(input.version || "").trim(), boardQuantity: Number(input.boardQuantity || 1), note: String(input.note || "").trim(), items: (input.items || []).map(nBomItem), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
+    return {
+      id: input.id || id(),
+      projectId: input.projectId || "",
+      name: String(input.name || "").trim(),
+      version: String(input.version || "").trim(),
+      boardQuantity: Number(input.boardQuantity || 1),
+      note: String(input.note || "").trim(),
+      sourceKind: input.sourceKind ? String(input.sourceKind).trim() : void 0,
+      sourceProjectUuid: input.sourceProjectUuid ? String(input.sourceProjectUuid).trim() : void 0,
+      sourcePcbUuid: input.sourcePcbUuid ? String(input.sourcePcbUuid).trim() : void 0,
+      sourcePcbName: input.sourcePcbName ? String(input.sourcePcbName).trim() : void 0,
+      sourceBoardName: input.sourceBoardName ? String(input.sourceBoardName).trim() : void 0,
+      sourceImportedAt: input.sourceImportedAt ? String(input.sourceImportedAt).trim() : void 0,
+      items: (input.items || []).map(nBomItem),
+      createdAt: input.createdAt || iso(),
+      updatedAt: input.updatedAt || iso()
+    };
   }
   function nStore(input) {
     return { id: input.id || id(), platform: String(input.platform || "").trim(), shopName: String(input.shopName || "").trim(), qualityScore: Number(input.qualityScore || 0), shippingFee: Number(input.shippingFee || 0), priceScore: Number(input.priceScore || 0), referencePrice: Number(input.referencePrice || 0), mainProducts: String(input.mainProducts || "").trim(), note: String(input.note || "").trim(), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
@@ -337,7 +364,7 @@
     const refreshLabel = snapshot ? t("\u5237\u65B0\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Refresh Snapshot") : t("\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Load Snapshot");
     const subtitle = state.edaSnapshotLoading ? t("\u6B63\u5728\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587...", "Reading current design context...") : snapshot ? t(`\u4E0A\u6B21\u8BFB\u53D6\uFF1A${time(snapshot.fetchedAt)}`, `Last loaded: ${time(snapshot.fetchedAt)}`) : t("\u5C1A\u672A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002", "Current design context has not been loaded yet.");
     const details = snapshot ? `<div class="meta-grid"><div><span>${e(t("\u5DE5\u7A0B", "Project"))}</span><strong>${e(projectLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D PCB", "Current PCB"))}</span><strong>${e(pcbLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D\u677F\u5B50", "Current Board"))}</span><strong>${e(boardLabel || "-")}</strong></div><div><span>${e(t("\u5DE5\u7A0B\u6761\u76EE", "Project Items"))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ""}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`\u5DE5\u7A0B\u94FE\u63A5\u540D\uFF1A${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ""}${snapshot.schematicName ? `<li>${e(t(`\u5F53\u524D\u539F\u7406\u56FE\uFF1A${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ""}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ""}</ul>` : `<p class="empty-state">${e(t("\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u5DE5\u7A0B\u540E\u70B9\u51FB\u201C\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u201D\uFF0C\u63D2\u4EF6\u4F1A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u3001PCB \u4E0E\u677F\u5B50\u4FE1\u606F\u3002", 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
-    return `<article class="panel-card"><div class="section-head"><h2>${e(t("\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Current Design Snapshot"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? "disabled" : ""}>${e(refreshLabel)}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u5BFC\u5165 BOM", "Import BOM from EDA"))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
+    return `<article class="panel-card"><div class="section-head"><h2>${e(t("\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Current Design Snapshot"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? "disabled" : ""}>${e(refreshLabel)}</button><button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t("\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165", "Batch Import Project"))}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t("\u5BFC\u5165\u5F53\u524D PCB BOM", "Import Current PCB BOM"))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
   }
   function render() {
     document.documentElement.setAttribute("data-theme", state.prefs.theme);
@@ -413,13 +440,13 @@
       row.total += item.quantityPerBoard * pcb.boardQuantity;
       row.names.add(`${((_a2 = pMap.get(pcb.projectId)) == null ? void 0 : _a2.name) || ""}/${pcb.name}`);
     }));
-    return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t("\u7F16\u8F91\u9879\u76EE", "Edit Project") : t("\u65B0\u589E\u9879\u76EE", "New Project"))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e((currentProject == null ? void 0 : currentProject.id) || "")}" /><label><span>${e(t("\u9879\u76EE\u540D\u79F0", "Project Name"))}</span><input name="name" required value="${e((currentProject == null ? void 0 : currentProject.name) || "")}" /></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((currentProject == null ? void 0 : currentProject.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t("\u7F16\u8F91 PCB", "Edit PCB") : t("\u65B0\u589E PCB", "New PCB"))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e((currentPcb == null ? void 0 : currentPcb.id) || "")}" /><label><span>${e(t("\u6240\u5C5E\u9879\u76EE", "Project"))}</span><select name="projectId" required><option value="">${e(t("\u8BF7\u9009\u62E9\u9879\u76EE", "Select project"))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${(currentPcb == null ? void 0 : currentPcb.projectId) === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></label><label><span>${e(t("PCB \u540D\u79F0", "PCB Name"))}</span><input name="name" required value="${e((currentPcb == null ? void 0 : currentPcb.name) || "")}" /></label><label><span>${e(t("\u7248\u672C\u53F7", "Version"))}</span><input name="version" value="${e((currentPcb == null ? void 0 : currentPcb.version) || "")}" /></label><label><span>${e(t("\u9879\u76EE\u7528\u677F\u6570\u91CF", "Board Qty"))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e((currentPcb == null ? void 0 : currentPcb.boardQuantity) || 1)}" /></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((currentPcb == null ? void 0 : currentPcb.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t("\u9700\u6C42\u7EDF\u8BA1", "Requirement Summary"))}</h2><select data-filter="project-filter"><option value="all">${e(t("\u5168\u90E8\u9879\u76EE", "All Projects"))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></div><div class="table-wrap"><table><thead><tr><th>${e(t("\u7C7B\u578B", "Type"))}</th><th>${e(t("\u578B\u53F7", "Model"))}</th><th>${e(t("\u603B\u9700\u6C42", "Demand"))}</th><th>${e(t("\u6D89\u53CA PCB", "PCB"))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => {
+    return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t("\u7F16\u8F91\u9879\u76EE", "Edit Project") : t("\u65B0\u589E\u9879\u76EE", "New Project"))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e((currentProject == null ? void 0 : currentProject.id) || "")}" /><label><span>${e(t("\u9879\u76EE\u540D\u79F0", "Project Name"))}</span><input name="name" required value="${e((currentProject == null ? void 0 : currentProject.name) || "")}" /></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((currentProject == null ? void 0 : currentProject.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t("\u7F16\u8F91 PCB", "Edit PCB") : t("\u65B0\u589E PCB", "New PCB"))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e((currentPcb == null ? void 0 : currentPcb.id) || "")}" /><label><span>${e(t("\u6240\u5C5E\u9879\u76EE", "Project"))}</span><select name="projectId" required><option value="">${e(t("\u8BF7\u9009\u62E9\u9879\u76EE", "Select project"))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${(currentPcb == null ? void 0 : currentPcb.projectId) === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></label><label><span>${e(t("PCB \u540D\u79F0", "PCB Name"))}</span><input name="name" required value="${e((currentPcb == null ? void 0 : currentPcb.name) || "")}" /></label><label><span>${e(t("\u7248\u672C\u53F7", "Version"))}</span><input name="version" value="${e((currentPcb == null ? void 0 : currentPcb.version) || "")}" /></label><label><span>${e(t("\u9879\u76EE\u7528\u677F\u6570\u91CF", "Board Qty"))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e((currentPcb == null ? void 0 : currentPcb.boardQuantity) || 1)}" /></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((currentPcb == null ? void 0 : currentPcb.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t("\u9700\u6C42\u7EDF\u8BA1", "Requirement Summary"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t("\u540C\u6B65\u5F53\u524D\u5DE5\u7A0B\u5168\u90E8 PCB", "Sync All PCB from Current Project"))}</button><select data-filter="project-filter"><option value="all">${e(t("\u5168\u90E8\u9879\u76EE", "All Projects"))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></div></div><div class="table-wrap"><table><thead><tr><th>${e(t("\u7C7B\u578B", "Type"))}</th><th>${e(t("\u578B\u53F7", "Model"))}</th><th>${e(t("\u603B\u9700\u6C42", "Demand"))}</th><th>${e(t("\u6D89\u53CA PCB", "PCB"))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => {
       var _a2, _b2;
       return (((_a2 = cMap.get(a[0])) == null ? void 0 : _a2.model) || "").localeCompare(((_b2 = cMap.get(b[0])) == null ? void 0 : _b2.model) || "", locale());
     }).map(([componentId, info]) => {
       var _a2, _b2, _c;
       return `<tr><td>${e(((_b2 = tMap.get((_a2 = cMap.get(componentId)) == null ? void 0 : _a2.typeId)) == null ? void 0 : _b2.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</td><td>${e(((_c = cMap.get(componentId)) == null ? void 0 : _c.model) || t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t("\uFF0C", ", ")))}</td></tr>`;
-    }).join("") || `<tr><td colspan="4" class="empty-state">${e(t("\u6682\u65E0\u7EDF\u8BA1\u6570\u636E\u3002", "No summary data."))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t("\u9879\u76EE\u4E0E PCB", "Projects and PCB"))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === "all" || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t("\u65E0\u9879\u76EE\u5907\u6CE8", "No note"))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ""}`)}</strong><p>${e(t(`\u9879\u76EE\u6570\u91CF ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p></div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t("\u7EF4\u62A4 BOM", "Manage BOM"))}</button><button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></div>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0 PCB\u3002", "No PCB."))}</p>`}</div></article>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0\u9879\u76EE\u6570\u636E\u3002", "No project data."))}</p>`}</div></section>`;
+    }).join("") || `<tr><td colspan="4" class="empty-state">${e(t("\u6682\u65E0\u7EDF\u8BA1\u6570\u636E\u3002", "No summary data."))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t("\u9879\u76EE\u4E0E PCB", "Projects and PCB"))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === "all" || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t("\u65E0\u9879\u76EE\u5907\u6CE8", "No note"))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ""}`)}</strong><p>${e(t(`\u9879\u76EE\u6570\u91CF ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p>${pcb.sourcePcbUuid ? `<p class="support-text">${e(`${t("\u5173\u8054 EDA PCB", "Linked EDA PCB")}: ${pcb.sourceBoardName ? `${pcb.sourceBoardName} / ` : ""}${pcb.sourcePcbName || pcb.name}`)}</p>` : ""}</div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t("\u7EF4\u62A4 BOM", "Manage BOM"))}</button>${pcb.sourcePcbUuid ? `<button class="ghost-button" type="button" data-action="open-source-pcb" data-pcb-id="${pcb.id}">${e(t("\u6253\u5F00\u5BF9\u5E94 PCB", "Open Source PCB"))}</button>` : ""}<button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></div>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0 PCB\u3002", "No PCB."))}</p>`}</div></article>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0\u9879\u76EE\u6570\u636E\u3002", "No project data."))}</p>`}</div></section>`;
   }
   function purchaseView() {
     var _a2;
@@ -1206,25 +1233,75 @@
       return row;
     });
   }
-  async function importEdaBomFromCurrent() {
-    const pcbApi = edaApi == null ? void 0 : edaApi.pcb_ManufactureData;
-    const schApi = edaApi == null ? void 0 : edaApi.sch_ManufactureData;
-    const snapshot = await refreshCurrentEdaSnapshot({ silent: true }).catch(() => null);
-    const getBomFile = pcbApi && typeof pcbApi.getBomFile === "function" ? pcbApi.getBomFile.bind(pcbApi) : schApi && typeof schApi.getBomFile === "function" ? schApi.getBomFile.bind(schApi) : null;
-    if (!getBomFile) {
-      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u672A\u63D0\u4F9B\u751F\u4EA7\u8D44\u6599 BOM \u5BFC\u51FA\u63A5\u53E3\uFF08pcb_ManufactureData/sch_ManufactureData\uFF09\u3002", "Manufacture BOM API not available."));
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  function collectTabIdsFromSplitScreenTree(node, result) {
+    const tabs = (node == null ? void 0 : node.tabs) || [];
+    for (const tab of tabs) {
+      if (tab == null ? void 0 : tab.tabId) result.add(String(tab.tabId));
     }
-    setStatus("info", t("\u6B63\u5728\u4ECE\u5F53\u524D\u5DE5\u7A0B\u751F\u6210 BOM \u6587\u4EF6...", "Generating BOM file from current design..."));
-    render();
-    const bomFile = await getBomFile("eda-bom", "csv");
-    if (!bomFile) {
-      throw new Error(t("\u672A\u83B7\u53D6\u5230 BOM \u6587\u4EF6\u3002\u8BF7\u786E\u8BA4\u5F53\u524D\u5DF2\u6253\u5F00 PCB/\u539F\u7406\u56FE\u5DE5\u7A0B\u540E\u91CD\u8BD5\u3002", "No BOM file returned. Open a design and retry."));
+    const children = (node == null ? void 0 : node.children) || [];
+    for (const child of children) collectTabIdsFromSplitScreenTree(child, result);
+    return result;
+  }
+  async function getOpenTabIdSet() {
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    if (!editorApi || typeof editorApi.getSplitScreenTree !== "function") return /* @__PURE__ */ new Set();
+    try {
+      const tree = await editorApi.getSplitScreenTree();
+      return collectTabIdsFromSplitScreenTree(tree, /* @__PURE__ */ new Set());
+    } catch (_error) {
+      return /* @__PURE__ */ new Set();
     }
-    const text = await bomFile.text();
-    const rows = parseDelimitedTable(text);
-    if (!rows.length) {
-      throw new Error(t("BOM \u6587\u4EF6\u4E3A\u7A7A\u6216\u65E0\u6CD5\u89E3\u6790\u3002", "BOM file is empty or cannot be parsed."));
-    }
+  }
+  function currentProjectLabelFromInfo(projectInfo, snapshot) {
+    return String((projectInfo == null ? void 0 : projectInfo.friendlyName) || (projectInfo == null ? void 0 : projectInfo.name) || projectDisplayNameFromSnapshot(snapshot) || "").trim();
+  }
+  function currentPcbLabelFromInfo(pcbInfo, boardInfo, snapshot) {
+    return String((pcbInfo == null ? void 0 : pcbInfo.name) || (boardInfo == null ? void 0 : boardInfo.name) || pcbDisplayNameFromSnapshot(snapshot) || "").trim();
+  }
+  function currentBoardLabelFromInfo(boardInfo, pcbInfo, snapshot) {
+    return String((boardInfo == null ? void 0 : boardInfo.name) || (pcbInfo == null ? void 0 : pcbInfo.parentBoardName) || boardDisplayNameFromSnapshot(snapshot) || "").trim();
+  }
+  function buildEdaProjectNoteText(options) {
+    const mode = (options == null ? void 0 : options.mode) === "project-sync" ? "project-sync" : "current-bom";
+    const projectLabel = String((options == null ? void 0 : options.projectLabel) || "").trim();
+    const projectName = String((options == null ? void 0 : options.projectName) || "").trim();
+    const boardLabel = String((options == null ? void 0 : options.boardLabel) || "").trim();
+    const pcbLabel = String((options == null ? void 0 : options.pcbLabel) || "").trim();
+    const projectUuid = String((options == null ? void 0 : options.projectUuid) || "").trim();
+    const description = String((options == null ? void 0 : options.description) || "").trim();
+    const importedAt = String((options == null ? void 0 : options.importedAt) || "").trim();
+    const lines = [
+      mode === "project-sync" ? t("\u7531\u5F53\u524D EDA \u5DE5\u7A0B\u6279\u91CF\u540C\u6B65\u751F\u6210\u3002", "Generated by batch syncing the current EDA project.") : t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import.")
+    ];
+    if (projectLabel) lines.push(`${t("\u6765\u6E90\u5DE5\u7A0B", "Source Project")}: ${projectLabel}`);
+    if (projectLabel && projectName && projectName !== projectLabel) lines.push(`${t("\u5DE5\u7A0B\u94FE\u63A5\u540D", "Project Slug")}: ${projectName}`);
+    if (description) lines.push(`${t("\u5DE5\u7A0B\u63CF\u8FF0", "Description")}: ${description}`);
+    if (boardLabel) lines.push(`${t("\u5F53\u524D\u677F\u5B50", "Current Board")}: ${boardLabel}`);
+    if (pcbLabel) lines.push(`${t("\u5F53\u524D PCB", "Current PCB")}: ${pcbLabel}`);
+    if (projectUuid) lines.push(`UUID: ${projectUuid}`);
+    if (importedAt) lines.push(`${t("\u5BFC\u5165\u65F6\u95F4", "Imported At")}: ${importedAt}`);
+    return lines.join("\n");
+  }
+  function buildEdaPcbNoteText(options) {
+    const mode = (options == null ? void 0 : options.mode) === "project-sync" ? "project-sync" : "current-bom";
+    const projectLabel = String((options == null ? void 0 : options.projectLabel) || "").trim();
+    const boardLabel = String((options == null ? void 0 : options.boardLabel) || "").trim();
+    const pcbLabel = String((options == null ? void 0 : options.pcbLabel) || "").trim();
+    const importedAt = String((options == null ? void 0 : options.importedAt) || "").trim();
+    const lines = [
+      mode === "project-sync" ? t("\u7531\u5F53\u524D EDA \u5DE5\u7A0B\u6279\u91CF\u540C\u6B65\u751F\u6210\u3002", "Generated by batch syncing the current EDA project.") : t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import.")
+    ];
+    if (projectLabel) lines.push(`${t("\u6765\u6E90\u5DE5\u7A0B", "Source Project")}: ${projectLabel}`);
+    if (boardLabel) lines.push(`${t("\u6765\u6E90\u677F\u5B50", "Source Board")}: ${boardLabel}`);
+    if (pcbLabel) lines.push(`${t("\u6765\u6E90 PCB", "Source PCB")}: ${pcbLabel}`);
+    if (importedAt) lines.push(`${t("\u5BFC\u5165\u65F6\u95F4", "Imported At")}: ${importedAt}`);
+    return lines.join("\n");
+  }
+  function groupBomRows(rows) {
+    if (!rows.length) throw new Error(t("BOM \u6587\u4EF6\u4E3A\u7A7A\u6216\u65E0\u6CD5\u89E3\u6790\u3002", "BOM file is empty or cannot be parsed."));
     const headers = Object.keys(rows[0] || {});
     const qtyHeader = findHeader(headers, ["Quantity", "Qty", "\u6570\u91CF", "\u7528\u91CF", "QTY"]);
     const modelHeader = findHeader(headers, [
@@ -1284,58 +1361,28 @@
       if (footprintHeader && row[footprintHeader]) item.footprint.add(String(row[footprintHeader]).trim());
       if (descHeader && row[descHeader]) item.desc.add(String(row[descHeader]).trim());
     }
-    if (!grouped.size) {
-      throw new Error(t("BOM \u4E2D\u672A\u53D1\u73B0\u6709\u6548\u884C\uFF08\u578B\u53F7\u6216\u6570\u91CF\u4E3A\u7A7A\uFF09\u3002", "No valid BOM lines found."));
-    }
-    const now = /* @__PURE__ */ new Date();
-    const nameSuffix = now.toLocaleString(locale(), { hour12: false });
-    const projectLabel = projectDisplayNameFromSnapshot(snapshot);
-    const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
-    const boardLabel = boardDisplayNameFromSnapshot(snapshot);
-    const projectNoteLines = [t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import.")];
-    if (projectLabel) projectNoteLines.push(`${t("\u6765\u6E90\u5DE5\u7A0B", "Source Project")}: ${projectLabel}`);
-    if (projectLabel && (snapshot == null ? void 0 : snapshot.projectName) && snapshot.projectName !== projectLabel) {
-      projectNoteLines.push(`${t("\u5DE5\u7A0B\u94FE\u63A5\u540D", "Project Slug")}: ${snapshot.projectName}`);
-    }
-    if (boardLabel) projectNoteLines.push(`${t("\u5F53\u524D\u677F\u5B50", "Current Board")}: ${boardLabel}`);
-    if (pcbLabel) projectNoteLines.push(`${t("\u5F53\u524D PCB", "Current PCB")}: ${pcbLabel}`);
-    if (snapshot == null ? void 0 : snapshot.projectUuid) projectNoteLines.push(`UUID: ${snapshot.projectUuid}`);
-    projectNoteLines.push(`${t("\u5BFC\u5165\u65F6\u95F4", "Imported At")}: ${nameSuffix}`);
-    const pcbNoteLines = [t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import.")];
-    if (projectLabel) pcbNoteLines.push(`${t("\u6765\u6E90\u5DE5\u7A0B", "Source Project")}: ${projectLabel}`);
-    if (boardLabel) pcbNoteLines.push(`${t("\u6765\u6E90\u677F\u5B50", "Source Board")}: ${boardLabel}`);
-    if (pcbLabel) pcbNoteLines.push(`${t("\u6765\u6E90 PCB", "Source PCB")}: ${pcbLabel}`);
-    const project = nProject({
-      id: id(),
-      name: projectLabel ? `${projectLabel} / ${t("EDA \u5BFC\u5165", "EDA Import")} ${nameSuffix}` : `EDA \u5BFC\u5165 ${nameSuffix}`,
-      note: projectNoteLines.join("\n"),
-      createdAt: iso(),
-      updatedAt: iso()
-    });
-    state.db.projects.push(project);
-    const pcb = nPcb({
-      id: id(),
-      projectId: project.id,
-      name: pcbLabel || t("\u5F53\u524D\u5DE5\u7A0B BOM", "Current Design BOM"),
-      version: "",
-      boardQuantity: 1,
-      note: pcbNoteLines.join("\n"),
-      items: [],
-      createdAt: iso(),
-      updatedAt: iso()
-    });
-    state.db.pcbs.push(pcb);
+    if (!grouped.size) throw new Error(t("BOM \u4E2D\u672A\u53D1\u73B0\u6709\u6548\u884C\uFF08\u578B\u53F7\u6216\u6570\u91CF\u4E3A\u7A7A\uFF09\u3002", "No valid BOM lines found."));
+    return grouped;
+  }
+  function replacePcbBomItemsFromGroups(targetPcb, grouped) {
+    const nextItems = [];
+    let createdComponents = 0;
     const ensureType = (typeName) => {
       const name = String(typeName || "").trim() || "EDA\u5BFC\u5165";
       let type = state.db.types.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
       if (!type) {
-        type = nType({ id: id(), name, primaryName: name.split("/")[0], secondaryName: name.split("/")[1] || "", createdAt: iso(), updatedAt: iso() });
+        type = nType({
+          id: id(),
+          name,
+          primaryName: name.split("/")[0],
+          secondaryName: name.split("/")[1] || "",
+          createdAt: iso(),
+          updatedAt: iso()
+        });
         state.db.types.push(type);
       }
       return type;
     };
-    let createdComponents = 0;
-    let createdBomItems = 0;
     for (const item of grouped.values()) {
       const type = ensureType(item.typeName);
       const model = String(item.model || "").trim();
@@ -1361,9 +1408,116 @@
         createdComponents += 1;
       }
       const qtyPerBoard = Math.max(1, Math.round(Number(item.qty || 0)));
-      pcb.items.push(nBomItem({ id: id(), componentId: component.id, quantityPerBoard: qtyPerBoard, createdAt: iso(), updatedAt: iso() }));
-      createdBomItems += 1;
+      nextItems.push(nBomItem({ id: id(), componentId: component.id, quantityPerBoard: qtyPerBoard, createdAt: iso(), updatedAt: iso() }));
     }
+    targetPcb.items = nextItems;
+    targetPcb.updatedAt = iso();
+    return { createdComponents, createdBomItems: nextItems.length };
+  }
+  function upsertSyncedProjectFromCurrent(projectInfo, snapshot, importedAt) {
+    const projectLabel = currentProjectLabelFromInfo(projectInfo, snapshot) || t("\u5F53\u524D\u5DE5\u7A0B", "Current Project");
+    const projectName = String((projectInfo == null ? void 0 : projectInfo.name) || (snapshot == null ? void 0 : snapshot.projectName) || "").trim();
+    const projectUuid = String((projectInfo == null ? void 0 : projectInfo.uuid) || (snapshot == null ? void 0 : snapshot.projectUuid) || "").trim();
+    const description = String((projectInfo == null ? void 0 : projectInfo.description) || (snapshot == null ? void 0 : snapshot.projectDescription) || "").trim();
+    const existing = state.db.projects.find(
+      (item) => item.sourceKind === "eda-project-sync" && projectUuid && item.sourceProjectUuid === projectUuid
+    );
+    const payload = {
+      ...existing || {},
+      id: (existing == null ? void 0 : existing.id) || id(),
+      name: `EDA / ${projectLabel}`,
+      note: buildEdaProjectNoteText({
+        mode: "project-sync",
+        projectLabel,
+        projectName,
+        projectUuid,
+        description,
+        importedAt
+      }),
+      sourceKind: "eda-project-sync",
+      sourceProjectUuid: projectUuid || void 0,
+      sourceProjectName: projectName || void 0,
+      sourceProjectFriendlyName: projectLabel || void 0,
+      sourceImportedAt: iso(),
+      createdAt: (existing == null ? void 0 : existing.createdAt) || iso(),
+      updatedAt: iso()
+    };
+    if (existing) {
+      Object.assign(existing, nProject(payload));
+      return existing;
+    }
+    const project = nProject(payload);
+    state.db.projects.push(project);
+    return project;
+  }
+  async function importEdaBomFromCurrent() {
+    const pcbApi = edaApi == null ? void 0 : edaApi.pcb_ManufactureData;
+    const schApi = edaApi == null ? void 0 : edaApi.sch_ManufactureData;
+    const snapshot = await refreshCurrentEdaSnapshot({ silent: true }).catch(() => null);
+    const getBomFile = pcbApi && typeof pcbApi.getBomFile === "function" ? pcbApi.getBomFile.bind(pcbApi) : schApi && typeof schApi.getBomFile === "function" ? schApi.getBomFile.bind(schApi) : null;
+    if (!getBomFile) {
+      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u672A\u63D0\u4F9B\u751F\u4EA7\u8D44\u6599 BOM \u5BFC\u51FA\u63A5\u53E3\uFF08pcb_ManufactureData/sch_ManufactureData\uFF09\u3002", "Manufacture BOM API not available."));
+    }
+    setStatus("info", t("\u6B63\u5728\u4ECE\u5F53\u524D\u5DE5\u7A0B\u751F\u6210 BOM \u6587\u4EF6...", "Generating BOM file from current design..."));
+    render();
+    const bomFile = await getBomFile("eda-bom", "csv");
+    if (!bomFile) {
+      throw new Error(t("\u672A\u83B7\u53D6\u5230 BOM \u6587\u4EF6\u3002\u8BF7\u786E\u8BA4\u5F53\u524D\u5DF2\u6253\u5F00 PCB/\u539F\u7406\u56FE\u5DE5\u7A0B\u540E\u91CD\u8BD5\u3002", "No BOM file returned. Open a design and retry."));
+    }
+    const text = await bomFile.text();
+    const grouped = groupBomRows(parseDelimitedTable(text));
+    const now = /* @__PURE__ */ new Date();
+    const nameSuffix = now.toLocaleString(locale(), { hour12: false });
+    const projectLabel = projectDisplayNameFromSnapshot(snapshot);
+    const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
+    const boardLabel = boardDisplayNameFromSnapshot(snapshot);
+    const project = nProject({
+      id: id(),
+      name: projectLabel ? `${projectLabel} / ${t("EDA \u5BFC\u5165", "EDA Import")} ${nameSuffix}` : `EDA \u5BFC\u5165 ${nameSuffix}`,
+      note: buildEdaProjectNoteText({
+        mode: "current-bom",
+        projectLabel,
+        projectName: snapshot == null ? void 0 : snapshot.projectName,
+        boardLabel,
+        pcbLabel,
+        projectUuid: snapshot == null ? void 0 : snapshot.projectUuid,
+        description: snapshot == null ? void 0 : snapshot.projectDescription,
+        importedAt: nameSuffix
+      }),
+      sourceKind: "eda-current-bom",
+      sourceProjectUuid: (snapshot == null ? void 0 : snapshot.projectUuid) || void 0,
+      sourceProjectName: (snapshot == null ? void 0 : snapshot.projectName) || void 0,
+      sourceProjectFriendlyName: projectLabel || void 0,
+      sourceImportedAt: iso(),
+      createdAt: iso(),
+      updatedAt: iso()
+    });
+    state.db.projects.push(project);
+    const pcb = nPcb({
+      id: id(),
+      projectId: project.id,
+      name: pcbLabel || t("\u5F53\u524D\u5DE5\u7A0B BOM", "Current Design BOM"),
+      version: "",
+      boardQuantity: 1,
+      note: buildEdaPcbNoteText({
+        mode: "current-bom",
+        projectLabel,
+        boardLabel,
+        pcbLabel,
+        importedAt: nameSuffix
+      }),
+      sourceKind: "eda-current-bom",
+      sourceProjectUuid: (snapshot == null ? void 0 : snapshot.projectUuid) || void 0,
+      sourcePcbUuid: (snapshot == null ? void 0 : snapshot.pcbUuid) || void 0,
+      sourcePcbName: pcbLabel || void 0,
+      sourceBoardName: boardLabel || void 0,
+      sourceImportedAt: iso(),
+      items: [],
+      createdAt: iso(),
+      updatedAt: iso()
+    });
+    state.db.pcbs.push(pcb);
+    const { createdComponents, createdBomItems } = replacePcbBomItemsFromGroups(pcb, grouped);
     state.db = nDb(state.db);
     await saveDb();
     state.view = "projects";
@@ -1376,6 +1530,170 @@
         `BOM imported from ${projectLabel}: +${createdComponents} components, +${createdBomItems} BOM items.`
       ) : t(`\u5DF2\u5BFC\u5165 BOM\uFF1A\u65B0\u589E ${createdComponents} \u4E2A\u5143\u5668\u4EF6\uFF0C\u65B0\u589E ${createdBomItems} \u6761 BOM \u660E\u7EC6\u3002`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`)
     );
+    render();
+  }
+  async function importAllEdaPcbsFromCurrentProject() {
+    var _a2, _b2;
+    const projectApi = edaApi == null ? void 0 : edaApi.dmt_Project;
+    const pcbTreeApi = edaApi == null ? void 0 : edaApi.dmt_Pcb;
+    const boardApi = edaApi == null ? void 0 : edaApi.dmt_Board;
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    const selectApi = edaApi == null ? void 0 : edaApi.dmt_SelectControl;
+    const bomApi = edaApi == null ? void 0 : edaApi.pcb_ManufactureData;
+    if (!projectApi || typeof projectApi.getCurrentProjectInfo !== "function" || !pcbTreeApi || typeof pcbTreeApi.getAllPcbsInfo !== "function" || !editorApi || typeof editorApi.openDocument !== "function" || !bomApi || typeof bomApi.getBomFile !== "function") {
+      throw new Error(
+        t(
+          "\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u6574\u5DE5\u7A0B\u6279\u91CF BOM \u5BFC\u5165\u3002\u8BF7\u5148\u5728\u201C\u73AF\u5883\u81EA\u68C0\u201D\u4E2D\u786E\u8BA4 dmt_Project / dmt_Pcb / dmt_EditorControl / pcb_ManufactureData \u53EF\u7528\u3002",
+          "This EDA build does not support batch project BOM import. Verify dmt_Project / dmt_Pcb / dmt_EditorControl / pcb_ManufactureData in SelfCheck."
+        )
+      );
+    }
+    const snapshot = await refreshCurrentEdaSnapshot({ silent: true });
+    const projectInfo = await projectApi.getCurrentProjectInfo();
+    if (!projectInfo) {
+      throw new Error(t("\u672A\u8BFB\u53D6\u5230\u5F53\u524D\u5DE5\u7A0B\u4FE1\u606F\u3002", "Cannot read the current project."));
+    }
+    const sourcePcbs = sort(await pcbTreeApi.getAllPcbsInfo(), (item) => `${item.parentBoardName || ""}${item.name || ""}`);
+    if (!sourcePcbs.length) {
+      throw new Error(t("\u5F53\u524D\u5DE5\u7A0B\u5185\u6CA1\u6709\u53EF\u5BFC\u5165\u7684 PCB\u3002", "No PCB found in the current project."));
+    }
+    const boardList = boardApi && typeof boardApi.getAllBoardsInfo === "function" ? await boardApi.getAllBoardsInfo().catch(() => []) : [];
+    const boardByPcbUuid = /* @__PURE__ */ new Map();
+    for (const board of boardList) {
+      const pcbUuid = String(((_a2 = board == null ? void 0 : board.pcb) == null ? void 0 : _a2.uuid) || "").trim();
+      if (pcbUuid) boardByPcbUuid.set(pcbUuid, board);
+    }
+    setStatus(
+      "info",
+      t(
+        `\u6B63\u5728\u540C\u6B65\u5F53\u524D\u5DE5\u7A0B\u7684 ${sourcePcbs.length} \u4E2A PCB\uFF0C\u8BF7\u52FF\u5207\u6362\u7F16\u8F91\u5668\u7126\u70B9...`,
+        `Syncing ${sourcePcbs.length} PCB documents from the current project. Please keep the editor focused...`
+      )
+    );
+    render();
+    const importedAt = (/* @__PURE__ */ new Date()).toLocaleString(locale(), { hour12: false });
+    const targetProject = upsertSyncedProjectFromCurrent(projectInfo, snapshot, importedAt);
+    const originalDoc = selectApi && typeof selectApi.getCurrentDocumentInfo === "function" ? await selectApi.getCurrentDocumentInfo().catch(() => void 0) : void 0;
+    const openTabIdsBefore = await getOpenTabIdSet();
+    let syncedPcbs = 0;
+    let createdPcbs = 0;
+    let createdComponents = 0;
+    let createdBomItems = 0;
+    const failures = [];
+    for (const sourcePcb of sourcePcbs) {
+      const sourcePcbUuid = String((sourcePcb == null ? void 0 : sourcePcb.uuid) || "").trim();
+      if (!sourcePcbUuid) continue;
+      const boardInfo = boardByPcbUuid.get(sourcePcbUuid) || null;
+      const projectLabel = currentProjectLabelFromInfo(projectInfo, snapshot);
+      const pcbLabel = currentPcbLabelFromInfo(sourcePcb, boardInfo, snapshot) || t("\u672A\u547D\u540D PCB", "Untitled PCB");
+      const boardLabel = currentBoardLabelFromInfo(boardInfo, sourcePcb, snapshot);
+      let tabId = "";
+      try {
+        tabId = String(await editorApi.openDocument(sourcePcbUuid) || "");
+        if (!tabId) throw new Error(t("\u65E0\u6CD5\u6253\u5F00 PCB \u6587\u6863\u3002", "Cannot open the PCB document."));
+        if (typeof editorApi.activateDocument === "function") {
+          await editorApi.activateDocument(tabId).catch(() => void 0);
+        }
+        await sleep(180);
+        const bomFile = await bomApi.getBomFile(`eda-bom-${safeFileStem(pcbLabel)}`, "csv");
+        if (!bomFile) throw new Error(t("\u672A\u751F\u6210 BOM \u6587\u4EF6\u3002", "No BOM file returned."));
+        const grouped = groupBomRows(parseDelimitedTable(await bomFile.text()));
+        let targetPcb = state.db.pcbs.find(
+          (item) => item.sourceKind === "eda-project-sync" && item.sourcePcbUuid === sourcePcbUuid
+        );
+        const payload = {
+          ...targetPcb || {},
+          id: (targetPcb == null ? void 0 : targetPcb.id) || id(),
+          projectId: targetProject.id,
+          name: pcbLabel,
+          version: (targetPcb == null ? void 0 : targetPcb.version) || "",
+          boardQuantity: Number((targetPcb == null ? void 0 : targetPcb.boardQuantity) || 1),
+          note: buildEdaPcbNoteText({
+            mode: "project-sync",
+            projectLabel,
+            boardLabel,
+            pcbLabel,
+            importedAt
+          }),
+          sourceKind: "eda-project-sync",
+          sourceProjectUuid: String((projectInfo == null ? void 0 : projectInfo.uuid) || (snapshot == null ? void 0 : snapshot.projectUuid) || "").trim() || void 0,
+          sourcePcbUuid,
+          sourcePcbName: pcbLabel || void 0,
+          sourceBoardName: boardLabel || void 0,
+          sourceImportedAt: iso(),
+          items: [],
+          createdAt: (targetPcb == null ? void 0 : targetPcb.createdAt) || iso(),
+          updatedAt: iso()
+        };
+        if (targetPcb) {
+          Object.assign(targetPcb, nPcb(payload));
+          syncedPcbs += 1;
+        } else {
+          targetPcb = nPcb(payload);
+          state.db.pcbs.push(targetPcb);
+          createdPcbs += 1;
+        }
+        const counts = replacePcbBomItemsFromGroups(targetPcb, grouped);
+        createdComponents += counts.createdComponents;
+        createdBomItems += counts.createdBomItems;
+      } catch (error) {
+        failures.push({
+          name: pcbLabel,
+          message: error instanceof Error ? error.message : String(error)
+        });
+      } finally {
+        if (tabId && !openTabIdsBefore.has(tabId) && typeof editorApi.closeDocument === "function") {
+          await editorApi.closeDocument(tabId).catch(() => void 0);
+        }
+      }
+    }
+    if (originalDoc == null ? void 0 : originalDoc.uuid) {
+      try {
+        const restoreTabId = await editorApi.openDocument(originalDoc.uuid);
+        if (restoreTabId && typeof editorApi.activateDocument === "function") {
+          await editorApi.activateDocument(restoreTabId).catch(() => void 0);
+        }
+      } catch (_error) {
+      }
+    }
+    const successCount = syncedPcbs + createdPcbs;
+    if (!successCount) {
+      const reason = ((_b2 = failures[0]) == null ? void 0 : _b2.message) || t("\u6CA1\u6709\u4EFB\u4F55 PCB \u540C\u6B65\u6210\u529F\u3002", "No PCB was synced successfully.");
+      throw new Error(reason);
+    }
+    state.db = nDb(state.db);
+    await saveDb();
+    state.view = "projects";
+    state.projectFilter = targetProject.id;
+    state.modal = null;
+    const failureSuffix = failures.length > 0 ? t(
+      `\uFF1B\u5931\u8D25 ${failures.length} \u4E2A\uFF08\u5982\uFF1A${failures.slice(0, 2).map((item) => item.name).join("\u3001")}\uFF09`,
+      `; ${failures.length} failed (e.g. ${failures.slice(0, 2).map((item) => item.name).join(", ")})`
+    ) : "";
+    setStatus(
+      "success",
+      t(
+        `\u6574\u5DE5\u7A0B BOM \u540C\u6B65\u5B8C\u6210\uFF1A\u65B0\u589E PCB ${createdPcbs} \u4E2A\u3001\u66F4\u65B0 PCB ${syncedPcbs} \u4E2A\u3001\u65B0\u589E\u5143\u5668\u4EF6 ${createdComponents} \u4E2A\u3001\u5199\u5165 BOM \u660E\u7EC6 ${createdBomItems} \u6761${failureSuffix}\u3002`,
+        `Project BOM sync finished: ${createdPcbs} PCB created, ${syncedPcbs} PCB updated, ${createdComponents} components created, ${createdBomItems} BOM items written${failureSuffix}.`
+      )
+    );
+    render();
+  }
+  async function openSourcePcb(pluginPcbId) {
+    const pcb = state.db.pcbs.find((item) => item.id === pluginPcbId);
+    if (!pcb || !pcb.sourcePcbUuid) {
+      throw new Error(t("\u8BE5 PCB \u672A\u5173\u8054\u5230 EDA \u5DE5\u7A0B\u5185\u7684 PCB\u3002", "This PCB is not linked to an EDA PCB document."));
+    }
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    if (!editorApi || typeof editorApi.openDocument !== "function") {
+      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u672A\u63D0\u4F9B\u6253\u5F00\u6587\u6863\u80FD\u529B\u3002", "This EDA build cannot open editor documents."));
+    }
+    const tabId = await editorApi.openDocument(pcb.sourcePcbUuid);
+    if (!tabId) throw new Error(t("\u6253\u5F00\u5BF9\u5E94 PCB \u5931\u8D25\u3002", "Failed to open the linked PCB."));
+    if (typeof editorApi.activateDocument === "function") {
+      await editorApi.activateDocument(tabId).catch(() => void 0);
+    }
+    setStatus("success", t(`\u5DF2\u6253\u5F00\u5BF9\u5E94 PCB\uFF1A${pcb.name}`, `Opened linked PCB: ${pcb.name}`));
     render();
   }
   async function exportJson() {
@@ -1874,6 +2192,7 @@
           return;
         }
         if (action === "refresh-eda-snapshot") return refreshCurrentEdaSnapshot();
+        if (action === "import-eda-project-bom") return importAllEdaPcbsFromCurrentProject();
         if (action === "import") return importData();
         if (action === "import-eda-bom") return importEdaBomFromCurrent();
         if (action === "export-json") return exportJson();
@@ -1935,6 +2254,7 @@
           render();
           return;
         }
+        if (action === "open-source-pcb") return openSourcePcb(target.dataset.pcbId);
         if (action === "delete-pcb") return deletePcb(target.dataset.id);
         if (action === "bom-modal") {
           state.modal = { type: "bom", pcbId: target.dataset.pcbId, itemId: target.dataset.itemId || null };

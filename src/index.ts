@@ -121,6 +121,8 @@ export async function selfCheck(): Promise<void> {
 		const projectApi = (eda as any)?.dmt_Project;
 		const pcbTreeApi = (eda as any)?.dmt_Pcb;
 		const boardApi = (eda as any)?.dmt_Board;
+		const editorControlApi = (eda as any)?.dmt_EditorControl;
+		const selectControlApi = (eda as any)?.dmt_SelectControl;
 		const pcbManufactureApi = (eda as any)?.pcb_ManufactureData;
 		const schManufactureApi = (eda as any)?.sch_ManufactureData;
 		return {
@@ -142,8 +144,17 @@ export async function selfCheck(): Promise<void> {
 			getCurrentProjectInfo: has(projectApi && typeof projectApi.getCurrentProjectInfo === 'function'),
 			dmt_Pcb: has(pcbTreeApi),
 			getCurrentPcbInfo: has(pcbTreeApi && typeof pcbTreeApi.getCurrentPcbInfo === 'function'),
+			getAllPcbsInfo: has(pcbTreeApi && typeof pcbTreeApi.getAllPcbsInfo === 'function'),
 			dmt_Board: has(boardApi),
 			getCurrentBoardInfo: has(boardApi && typeof boardApi.getCurrentBoardInfo === 'function'),
+			getAllBoardsInfo: has(boardApi && typeof boardApi.getAllBoardsInfo === 'function'),
+			dmt_EditorControl: has(editorControlApi),
+			openDocument: has(editorControlApi && typeof editorControlApi.openDocument === 'function'),
+			activateDocument: has(editorControlApi && typeof editorControlApi.activateDocument === 'function'),
+			closeDocument: has(editorControlApi && typeof editorControlApi.closeDocument === 'function'),
+			getSplitScreenTree: has(editorControlApi && typeof editorControlApi.getSplitScreenTree === 'function'),
+			dmt_SelectControl: has(selectControlApi),
+			getCurrentDocumentInfo: has(selectControlApi && typeof selectControlApi.getCurrentDocumentInfo === 'function'),
 			pcb_ManufactureData: has(pcbManufactureApi),
 			pcbGetBomFile: has(pcbManufactureApi && typeof pcbManufactureApi.getBomFile === 'function'),
 			sch_ManufactureData: has(schManufactureApi),

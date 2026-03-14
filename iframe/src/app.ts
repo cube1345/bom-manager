@@ -237,13 +237,40 @@
 		return { id: input.id || id(), typeId: input.typeId || '', model: String(input.model || '').trim(), auxInfo: String(input.auxInfo || '').trim(), note: String(input.note || '').trim(), warningThreshold: Number(input.warningThreshold || 0), records, totalQuantity, lowestPrice, createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
 	}
 	function nProject(input) {
-		return { id: input.id || id(), name: String(input.name || '').trim(), note: String(input.note || '').trim(), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
+		return {
+			id: input.id || id(),
+			name: String(input.name || '').trim(),
+			note: String(input.note || '').trim(),
+			sourceKind: input.sourceKind ? String(input.sourceKind).trim() : undefined,
+			sourceProjectUuid: input.sourceProjectUuid ? String(input.sourceProjectUuid).trim() : undefined,
+			sourceProjectName: input.sourceProjectName ? String(input.sourceProjectName).trim() : undefined,
+			sourceProjectFriendlyName: input.sourceProjectFriendlyName ? String(input.sourceProjectFriendlyName).trim() : undefined,
+			sourceImportedAt: input.sourceImportedAt ? String(input.sourceImportedAt).trim() : undefined,
+			createdAt: input.createdAt || iso(),
+			updatedAt: input.updatedAt || iso(),
+		};
 	}
 	function nBomItem(input) {
 		return { id: input.id || id(), componentId: input.componentId || '', quantityPerBoard: Number(input.quantityPerBoard || 0), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
 	}
 	function nPcb(input) {
-		return { id: input.id || id(), projectId: input.projectId || '', name: String(input.name || '').trim(), version: String(input.version || '').trim(), boardQuantity: Number(input.boardQuantity || 1), note: String(input.note || '').trim(), items: (input.items || []).map(nBomItem), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
+		return {
+			id: input.id || id(),
+			projectId: input.projectId || '',
+			name: String(input.name || '').trim(),
+			version: String(input.version || '').trim(),
+			boardQuantity: Number(input.boardQuantity || 1),
+			note: String(input.note || '').trim(),
+			sourceKind: input.sourceKind ? String(input.sourceKind).trim() : undefined,
+			sourceProjectUuid: input.sourceProjectUuid ? String(input.sourceProjectUuid).trim() : undefined,
+			sourcePcbUuid: input.sourcePcbUuid ? String(input.sourcePcbUuid).trim() : undefined,
+			sourcePcbName: input.sourcePcbName ? String(input.sourcePcbName).trim() : undefined,
+			sourceBoardName: input.sourceBoardName ? String(input.sourceBoardName).trim() : undefined,
+			sourceImportedAt: input.sourceImportedAt ? String(input.sourceImportedAt).trim() : undefined,
+			items: (input.items || []).map(nBomItem),
+			createdAt: input.createdAt || iso(),
+			updatedAt: input.updatedAt || iso(),
+		};
 	}
 	function nStore(input) {
 		return { id: input.id || id(), platform: String(input.platform || '').trim(), shopName: String(input.shopName || '').trim(), qualityScore: Number(input.qualityScore || 0), shippingFee: Number(input.shippingFee || 0), priceScore: Number(input.priceScore || 0), referencePrice: Number(input.referencePrice || 0), mainProducts: String(input.mainProducts || '').trim(), note: String(input.note || '').trim(), createdAt: input.createdAt || iso(), updatedAt: input.updatedAt || iso() };
@@ -379,7 +406,7 @@
 		const details = snapshot
 			? `<div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectLabel || '-')}</strong></div><div><span>${e(t('当前 PCB', 'Current PCB'))}</span><strong>${e(pcbLabel || '-')}</strong></div><div><span>${e(t('当前板子', 'Current Board'))}</span><strong>${e(boardLabel || '-')}</strong></div><div><span>${e(t('工程条目', 'Project Items'))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ''}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`工程链接名：${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ''}${snapshot.schematicName ? `<li>${e(t(`当前原理图：${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ''}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ''}</ul>`
 			: `<p class="empty-state">${e(t('切换到已打开的工程后点击“读取当前工程快照”，插件会读取当前工程、PCB 与板子信息。', 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
-		return `<article class="panel-card"><div class="section-head"><h2>${e(t('当前工程快照', 'Current Design Snapshot'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t('从当前工程导入 BOM', 'Import BOM from EDA'))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
+		return `<article class="panel-card"><div class="section-head"><h2>${e(t('当前工程快照', 'Current Design Snapshot'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button><button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('整工程批量导入', 'Batch Import Project'))}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t('导入当前 PCB BOM', 'Import Current PCB BOM'))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
 	}
 
 	function render() {
@@ -431,7 +458,7 @@
 		const pcbs = state.projectFilter === 'all' ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === state.projectFilter);
 		const summary = new Map();
 		pcbs.forEach((pcb) => pcb.items.forEach((item) => { if (!summary.has(item.componentId)) summary.set(item.componentId, { total: 0, names: new Set() }); const row = summary.get(item.componentId); row.total += item.quantityPerBoard * pcb.boardQuantity; row.names.add(`${pMap.get(pcb.projectId)?.name || ''}/${pcb.name}`); }));
-		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t('编辑项目', 'Edit Project') : t('新增项目', 'New Project'))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e(currentProject?.id || '')}" /><label><span>${e(t('项目名称', 'Project Name'))}</span><input name="name" required value="${e(currentProject?.name || '')}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentProject?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t('编辑 PCB', 'Edit PCB') : t('新增 PCB', 'New PCB'))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e(currentPcb?.id || '')}" /><label><span>${e(t('所属项目', 'Project'))}</span><select name="projectId" required><option value="">${e(t('请选择项目', 'Select project'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${currentPcb?.projectId === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></label><label><span>${e(t('PCB 名称', 'PCB Name'))}</span><input name="name" required value="${e(currentPcb?.name || '')}" /></label><label><span>${e(t('版本号', 'Version'))}</span><input name="version" value="${e(currentPcb?.version || '')}" /></label><label><span>${e(t('项目用板数量', 'Board Qty'))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e(currentPcb?.boardQuantity || 1)}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentPcb?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t('需求统计', 'Requirement Summary'))}</h2><select data-filter="project-filter"><option value="all">${e(t('全部项目', 'All Projects'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></div><div class="table-wrap"><table><thead><tr><th>${e(t('类型', 'Type'))}</th><th>${e(t('型号', 'Model'))}</th><th>${e(t('总需求', 'Demand'))}</th><th>${e(t('涉及 PCB', 'PCB'))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => (cMap.get(a[0])?.model || '').localeCompare(cMap.get(b[0])?.model || '', locale())).map(([componentId, info]) => `<tr><td>${e(tMap.get(cMap.get(componentId)?.typeId)?.name || t('未知类型', 'Unknown Type'))}</td><td>${e(cMap.get(componentId)?.model || t('未知元器件', 'Unknown Component'))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t('，', ', ')))}</td></tr>`).join('') || `<tr><td colspan="4" class="empty-state">${e(t('暂无统计数据。', 'No summary data.'))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t('项目与 PCB', 'Projects and PCB'))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === 'all' || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t('无项目备注', 'No note'))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t('删除', 'Delete'))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ''}`)}</strong><p>${e(t(`项目数量 ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p></div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t('维护 BOM', 'Manage BOM'))}</button><button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t('删除', 'Delete'))}</button></div></div>`).join('') || `<p class="empty-state">${e(t('暂无 PCB。', 'No PCB.'))}</p>`}</div></article>`).join('') || `<p class="empty-state">${e(t('暂无项目数据。', 'No project data.'))}</p>`}</div></section>`;
+		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t('编辑项目', 'Edit Project') : t('新增项目', 'New Project'))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e(currentProject?.id || '')}" /><label><span>${e(t('项目名称', 'Project Name'))}</span><input name="name" required value="${e(currentProject?.name || '')}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentProject?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t('编辑 PCB', 'Edit PCB') : t('新增 PCB', 'New PCB'))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e(currentPcb?.id || '')}" /><label><span>${e(t('所属项目', 'Project'))}</span><select name="projectId" required><option value="">${e(t('请选择项目', 'Select project'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${currentPcb?.projectId === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></label><label><span>${e(t('PCB 名称', 'PCB Name'))}</span><input name="name" required value="${e(currentPcb?.name || '')}" /></label><label><span>${e(t('版本号', 'Version'))}</span><input name="version" value="${e(currentPcb?.version || '')}" /></label><label><span>${e(t('项目用板数量', 'Board Qty'))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e(currentPcb?.boardQuantity || 1)}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentPcb?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t('需求统计', 'Requirement Summary'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('同步当前工程全部 PCB', 'Sync All PCB from Current Project'))}</button><select data-filter="project-filter"><option value="all">${e(t('全部项目', 'All Projects'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></div></div><div class="table-wrap"><table><thead><tr><th>${e(t('类型', 'Type'))}</th><th>${e(t('型号', 'Model'))}</th><th>${e(t('总需求', 'Demand'))}</th><th>${e(t('涉及 PCB', 'PCB'))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => (cMap.get(a[0])?.model || '').localeCompare(cMap.get(b[0])?.model || '', locale())).map(([componentId, info]) => `<tr><td>${e(tMap.get(cMap.get(componentId)?.typeId)?.name || t('未知类型', 'Unknown Type'))}</td><td>${e(cMap.get(componentId)?.model || t('未知元器件', 'Unknown Component'))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t('，', ', ')))}</td></tr>`).join('') || `<tr><td colspan="4" class="empty-state">${e(t('暂无统计数据。', 'No summary data.'))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t('项目与 PCB', 'Projects and PCB'))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === 'all' || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t('无项目备注', 'No note'))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t('删除', 'Delete'))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ''}`)}</strong><p>${e(t(`项目数量 ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p>${pcb.sourcePcbUuid ? `<p class="support-text">${e(`${t('关联 EDA PCB', 'Linked EDA PCB')}: ${pcb.sourceBoardName ? `${pcb.sourceBoardName} / ` : ''}${pcb.sourcePcbName || pcb.name}`)}</p>` : ''}</div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t('维护 BOM', 'Manage BOM'))}</button>${pcb.sourcePcbUuid ? `<button class="ghost-button" type="button" data-action="open-source-pcb" data-pcb-id="${pcb.id}">${e(t('打开对应 PCB', 'Open Source PCB'))}</button>` : ''}<button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t('删除', 'Delete'))}</button></div></div>`).join('') || `<p class="empty-state">${e(t('暂无 PCB。', 'No PCB.'))}</p>`}</div></article>`).join('') || `<p class="empty-state">${e(t('暂无项目数据。', 'No project data.'))}</p>`}</div></section>`;
 	}
 	
 
@@ -1299,34 +1326,79 @@
 		});
 	}
 
-	async function importEdaBomFromCurrent(): Promise<void> {
-		const pcbApi = edaApi?.pcb_ManufactureData;
-		const schApi = edaApi?.sch_ManufactureData;
-		const snapshot = await refreshCurrentEdaSnapshot({ silent: true }).catch(() => null);
-		const getBomFile =
-			pcbApi && typeof pcbApi.getBomFile === 'function'
-				? pcbApi.getBomFile.bind(pcbApi)
-				: schApi && typeof schApi.getBomFile === 'function'
-					? schApi.getBomFile.bind(schApi)
-					: null;
-		if (!getBomFile) {
-			throw new Error(t('当前 EDA 版本未提供生产资料 BOM 导出接口（pcb_ManufactureData/sch_ManufactureData）。', 'Manufacture BOM API not available.'));
+	function sleep(ms) {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+	function collectTabIdsFromSplitScreenTree(node, result) {
+		const tabs = node?.tabs || [];
+		for (const tab of tabs) {
+			if (tab?.tabId) result.add(String(tab.tabId));
 		}
-
-		setStatus('info', t('正在从当前工程生成 BOM 文件...', 'Generating BOM file from current design...'));
-		render();
-
-		const bomFile = await getBomFile('eda-bom', 'csv');
-		if (!bomFile) {
-			throw new Error(t('未获取到 BOM 文件。请确认当前已打开 PCB/原理图工程后重试。', 'No BOM file returned. Open a design and retry.'));
+		const children = node?.children || [];
+		for (const child of children) collectTabIdsFromSplitScreenTree(child, result);
+		return result;
+	}
+	async function getOpenTabIdSet() {
+		const editorApi = edaApi?.dmt_EditorControl;
+		if (!editorApi || typeof editorApi.getSplitScreenTree !== 'function') return new Set();
+		try {
+			const tree = await editorApi.getSplitScreenTree();
+			return collectTabIdsFromSplitScreenTree(tree, new Set());
+		} catch (_error) {
+			return new Set();
 		}
-
-		const text = await bomFile.text();
-		const rows = parseDelimitedTable(text);
-		if (!rows.length) {
-			throw new Error(t('BOM 文件为空或无法解析。', 'BOM file is empty or cannot be parsed.'));
-		}
-
+	}
+	function currentProjectLabelFromInfo(projectInfo, snapshot) {
+		return String(projectInfo?.friendlyName || projectInfo?.name || projectDisplayNameFromSnapshot(snapshot) || '').trim();
+	}
+	function currentPcbLabelFromInfo(pcbInfo, boardInfo, snapshot) {
+		return String(pcbInfo?.name || boardInfo?.name || pcbDisplayNameFromSnapshot(snapshot) || '').trim();
+	}
+	function currentBoardLabelFromInfo(boardInfo, pcbInfo, snapshot) {
+		return String(boardInfo?.name || pcbInfo?.parentBoardName || boardDisplayNameFromSnapshot(snapshot) || '').trim();
+	}
+	function buildEdaProjectNoteText(options) {
+		const mode = options?.mode === 'project-sync' ? 'project-sync' : 'current-bom';
+		const projectLabel = String(options?.projectLabel || '').trim();
+		const projectName = String(options?.projectName || '').trim();
+		const boardLabel = String(options?.boardLabel || '').trim();
+		const pcbLabel = String(options?.pcbLabel || '').trim();
+		const projectUuid = String(options?.projectUuid || '').trim();
+		const description = String(options?.description || '').trim();
+		const importedAt = String(options?.importedAt || '').trim();
+		const lines = [
+			mode === 'project-sync'
+				? t('由当前 EDA 工程批量同步生成。', 'Generated by batch syncing the current EDA project.')
+				: t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.'),
+		];
+		if (projectLabel) lines.push(`${t('来源工程', 'Source Project')}: ${projectLabel}`);
+		if (projectLabel && projectName && projectName !== projectLabel) lines.push(`${t('工程链接名', 'Project Slug')}: ${projectName}`);
+		if (description) lines.push(`${t('工程描述', 'Description')}: ${description}`);
+		if (boardLabel) lines.push(`${t('当前板子', 'Current Board')}: ${boardLabel}`);
+		if (pcbLabel) lines.push(`${t('当前 PCB', 'Current PCB')}: ${pcbLabel}`);
+		if (projectUuid) lines.push(`UUID: ${projectUuid}`);
+		if (importedAt) lines.push(`${t('导入时间', 'Imported At')}: ${importedAt}`);
+		return lines.join('\n');
+	}
+	function buildEdaPcbNoteText(options) {
+		const mode = options?.mode === 'project-sync' ? 'project-sync' : 'current-bom';
+		const projectLabel = String(options?.projectLabel || '').trim();
+		const boardLabel = String(options?.boardLabel || '').trim();
+		const pcbLabel = String(options?.pcbLabel || '').trim();
+		const importedAt = String(options?.importedAt || '').trim();
+		const lines = [
+			mode === 'project-sync'
+				? t('由当前 EDA 工程批量同步生成。', 'Generated by batch syncing the current EDA project.')
+				: t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.'),
+		];
+		if (projectLabel) lines.push(`${t('来源工程', 'Source Project')}: ${projectLabel}`);
+		if (boardLabel) lines.push(`${t('来源板子', 'Source Board')}: ${boardLabel}`);
+		if (pcbLabel) lines.push(`${t('来源 PCB', 'Source PCB')}: ${pcbLabel}`);
+		if (importedAt) lines.push(`${t('导入时间', 'Imported At')}: ${importedAt}`);
+		return lines.join('\n');
+	}
+	function groupBomRows(rows) {
+		if (!rows.length) throw new Error(t('BOM 文件为空或无法解析。', 'BOM file is empty or cannot be parsed.'));
 		const headers = Object.keys(rows[0] || {});
 		const qtyHeader = findHeader(headers, ['Quantity', 'Qty', '数量', '用量', 'QTY']);
 		const modelHeader = findHeader(headers, [
@@ -1351,7 +1423,6 @@
 		const refHeader = findHeader(headers, ['Designator', 'Reference', 'RefDes', '位号', '标号']);
 		const footprintHeader = findHeader(headers, ['Footprint', 'Package', '封装']);
 		const descHeader = findHeader(headers, ['Description', 'Desc', '描述', '说明']);
-
 		if (!qtyHeader || !modelHeader) {
 			throw new Error(
 				t(
@@ -1360,13 +1431,10 @@
 				),
 			);
 		}
-
 		const num = (input) => {
 			const n = Number(String(input || '').trim().replaceAll(/[, ]+/g, ''));
 			return Number.isFinite(n) ? n : 0;
 		};
-
-		// Group by model (case-insensitive) and typeName.
 		const grouped = new Map();
 		for (const row of rows) {
 			const qty = num(row[qtyHeader]);
@@ -1390,69 +1458,32 @@
 			if (footprintHeader && row[footprintHeader]) item.footprint.add(String(row[footprintHeader]).trim());
 			if (descHeader && row[descHeader]) item.desc.add(String(row[descHeader]).trim());
 		}
-
-		if (!grouped.size) {
-			throw new Error(t('BOM 中未发现有效行（型号或数量为空）。', 'No valid BOM lines found.'));
-		}
-
-		const now = new Date();
-		const nameSuffix = now.toLocaleString(locale(), { hour12: false });
-		const projectLabel = projectDisplayNameFromSnapshot(snapshot);
-		const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
-		const boardLabel = boardDisplayNameFromSnapshot(snapshot);
-		const projectNoteLines = [t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.')];
-		if (projectLabel) projectNoteLines.push(`${t('来源工程', 'Source Project')}: ${projectLabel}`);
-		if (projectLabel && snapshot?.projectName && snapshot.projectName !== projectLabel) {
-			projectNoteLines.push(`${t('工程链接名', 'Project Slug')}: ${snapshot.projectName}`);
-		}
-		if (boardLabel) projectNoteLines.push(`${t('当前板子', 'Current Board')}: ${boardLabel}`);
-		if (pcbLabel) projectNoteLines.push(`${t('当前 PCB', 'Current PCB')}: ${pcbLabel}`);
-		if (snapshot?.projectUuid) projectNoteLines.push(`UUID: ${snapshot.projectUuid}`);
-		projectNoteLines.push(`${t('导入时间', 'Imported At')}: ${nameSuffix}`);
-		const pcbNoteLines = [t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.')];
-		if (projectLabel) pcbNoteLines.push(`${t('来源工程', 'Source Project')}: ${projectLabel}`);
-		if (boardLabel) pcbNoteLines.push(`${t('来源板子', 'Source Board')}: ${boardLabel}`);
-		if (pcbLabel) pcbNoteLines.push(`${t('来源 PCB', 'Source PCB')}: ${pcbLabel}`);
-		const project = nProject({
-			id: id(),
-			name: projectLabel ? `${projectLabel} / ${t('EDA 导入', 'EDA Import')} ${nameSuffix}` : `EDA 导入 ${nameSuffix}`,
-			note: projectNoteLines.join('\n'),
-			createdAt: iso(),
-			updatedAt: iso(),
-		});
-		state.db.projects.push(project);
-		const pcb = nPcb({
-			id: id(),
-			projectId: project.id,
-			name: pcbLabel || t('当前工程 BOM', 'Current Design BOM'),
-			version: '',
-			boardQuantity: 1,
-			note: pcbNoteLines.join('\n'),
-			items: [],
-			createdAt: iso(),
-			updatedAt: iso(),
-		});
-		state.db.pcbs.push(pcb);
-
+		if (!grouped.size) throw new Error(t('BOM 中未发现有效行（型号或数量为空）。', 'No valid BOM lines found.'));
+		return grouped;
+	}
+	function replacePcbBomItemsFromGroups(targetPcb, grouped) {
+		const nextItems = [];
+		let createdComponents = 0;
 		const ensureType = (typeName) => {
 			const name = String(typeName || '').trim() || 'EDA导入';
 			let type = state.db.types.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
 			if (!type) {
-				type = nType({ id: id(), name, primaryName: name.split('/')[0], secondaryName: name.split('/')[1] || '', createdAt: iso(), updatedAt: iso() });
+				type = nType({
+					id: id(),
+					name,
+					primaryName: name.split('/')[0],
+					secondaryName: name.split('/')[1] || '',
+					createdAt: iso(),
+					updatedAt: iso(),
+				});
 				state.db.types.push(type);
 			}
 			return type;
 		};
-
-		let createdComponents = 0;
-		let createdBomItems = 0;
-
 		for (const item of grouped.values()) {
 			const type = ensureType(item.typeName);
 			const model = String(item.model || '').trim();
 			if (!model) continue;
-
-			// Try to reuse existing component by model first (regardless of type), otherwise create under detected type.
 			let component =
 				state.db.components.find((entry) => entry.model.toLowerCase() === model.toLowerCase()) ||
 				state.db.components.find((entry) => entry.typeId === type.id && entry.model.toLowerCase() === model.toLowerCase());
@@ -1461,7 +1492,6 @@
 				if (item.footprint.size) auxParts.push(`${t('封装', 'Footprint')}: ${Array.from(item.footprint).join(' / ')}`);
 				if (item.desc.size) auxParts.push(`${t('描述', 'Description')}: ${Array.from(item.desc).join(' / ')}`);
 				if (item.ref.size) auxParts.push(`${t('位号', 'Ref')}: ${Array.from(item.ref).slice(0, 6).join(', ')}${item.ref.size > 6 ? ` (+${item.ref.size - 6})` : ''}`);
-
 				component = nComponent({
 					id: id(),
 					typeId: type.id,
@@ -1476,11 +1506,127 @@
 				state.db.components.push(component);
 				createdComponents += 1;
 			}
-
 			const qtyPerBoard = Math.max(1, Math.round(Number(item.qty || 0)));
-			pcb.items.push(nBomItem({ id: id(), componentId: component.id, quantityPerBoard: qtyPerBoard, createdAt: iso(), updatedAt: iso() }));
-			createdBomItems += 1;
+			nextItems.push(nBomItem({ id: id(), componentId: component.id, quantityPerBoard: qtyPerBoard, createdAt: iso(), updatedAt: iso() }));
 		}
+		targetPcb.items = nextItems;
+		targetPcb.updatedAt = iso();
+		return { createdComponents, createdBomItems: nextItems.length };
+	}
+	function upsertSyncedProjectFromCurrent(projectInfo, snapshot, importedAt) {
+		const projectLabel = currentProjectLabelFromInfo(projectInfo, snapshot) || t('当前工程', 'Current Project');
+		const projectName = String(projectInfo?.name || snapshot?.projectName || '').trim();
+		const projectUuid = String(projectInfo?.uuid || snapshot?.projectUuid || '').trim();
+		const description = String(projectInfo?.description || snapshot?.projectDescription || '').trim();
+		const existing = state.db.projects.find(
+			(item) => item.sourceKind === 'eda-project-sync' && projectUuid && item.sourceProjectUuid === projectUuid,
+		);
+		const payload = {
+			...(existing || {}),
+			id: existing?.id || id(),
+			name: `EDA / ${projectLabel}`,
+			note: buildEdaProjectNoteText({
+				mode: 'project-sync',
+				projectLabel,
+				projectName,
+				projectUuid,
+				description,
+				importedAt,
+			}),
+			sourceKind: 'eda-project-sync',
+			sourceProjectUuid: projectUuid || undefined,
+			sourceProjectName: projectName || undefined,
+			sourceProjectFriendlyName: projectLabel || undefined,
+			sourceImportedAt: iso(),
+			createdAt: existing?.createdAt || iso(),
+			updatedAt: iso(),
+		};
+		if (existing) {
+			Object.assign(existing, nProject(payload));
+			return existing;
+		}
+		const project = nProject(payload);
+		state.db.projects.push(project);
+		return project;
+	}
+
+	async function importEdaBomFromCurrent(): Promise<void> {
+		const pcbApi = edaApi?.pcb_ManufactureData;
+		const schApi = edaApi?.sch_ManufactureData;
+		const snapshot = await refreshCurrentEdaSnapshot({ silent: true }).catch(() => null);
+		const getBomFile =
+			pcbApi && typeof pcbApi.getBomFile === 'function'
+				? pcbApi.getBomFile.bind(pcbApi)
+				: schApi && typeof schApi.getBomFile === 'function'
+					? schApi.getBomFile.bind(schApi)
+					: null;
+		if (!getBomFile) {
+			throw new Error(t('当前 EDA 版本未提供生产资料 BOM 导出接口（pcb_ManufactureData/sch_ManufactureData）。', 'Manufacture BOM API not available.'));
+		}
+
+		setStatus('info', t('正在从当前工程生成 BOM 文件...', 'Generating BOM file from current design...'));
+		render();
+
+		const bomFile = await getBomFile('eda-bom', 'csv');
+		if (!bomFile) {
+			throw new Error(t('未获取到 BOM 文件。请确认当前已打开 PCB/原理图工程后重试。', 'No BOM file returned. Open a design and retry.'));
+		}
+
+		const text = await bomFile.text();
+		const grouped = groupBomRows(parseDelimitedTable(text));
+
+		const now = new Date();
+		const nameSuffix = now.toLocaleString(locale(), { hour12: false });
+		const projectLabel = projectDisplayNameFromSnapshot(snapshot);
+		const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
+		const boardLabel = boardDisplayNameFromSnapshot(snapshot);
+		const project = nProject({
+			id: id(),
+			name: projectLabel ? `${projectLabel} / ${t('EDA 导入', 'EDA Import')} ${nameSuffix}` : `EDA 导入 ${nameSuffix}`,
+			note: buildEdaProjectNoteText({
+				mode: 'current-bom',
+				projectLabel,
+				projectName: snapshot?.projectName,
+				boardLabel,
+				pcbLabel,
+				projectUuid: snapshot?.projectUuid,
+				description: snapshot?.projectDescription,
+				importedAt: nameSuffix,
+			}),
+			sourceKind: 'eda-current-bom',
+			sourceProjectUuid: snapshot?.projectUuid || undefined,
+			sourceProjectName: snapshot?.projectName || undefined,
+			sourceProjectFriendlyName: projectLabel || undefined,
+			sourceImportedAt: iso(),
+			createdAt: iso(),
+			updatedAt: iso(),
+		});
+		state.db.projects.push(project);
+		const pcb = nPcb({
+			id: id(),
+			projectId: project.id,
+			name: pcbLabel || t('当前工程 BOM', 'Current Design BOM'),
+			version: '',
+			boardQuantity: 1,
+			note: buildEdaPcbNoteText({
+				mode: 'current-bom',
+				projectLabel,
+				boardLabel,
+				pcbLabel,
+				importedAt: nameSuffix,
+			}),
+			sourceKind: 'eda-current-bom',
+			sourceProjectUuid: snapshot?.projectUuid || undefined,
+			sourcePcbUuid: snapshot?.pcbUuid || undefined,
+			sourcePcbName: pcbLabel || undefined,
+			sourceBoardName: boardLabel || undefined,
+			sourceImportedAt: iso(),
+			items: [],
+			createdAt: iso(),
+			updatedAt: iso(),
+		});
+		state.db.pcbs.push(pcb);
+		const { createdComponents, createdBomItems } = replacePcbBomItemsFromGroups(pcb, grouped);
 
 		// Normalize + persist
 		state.db = nDb(state.db);
@@ -1498,6 +1644,196 @@
 					)
 				: t(`已导入 BOM：新增 ${createdComponents} 个元器件，新增 ${createdBomItems} 条 BOM 明细。`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`),
 		);
+		render();
+	}
+
+	async function importAllEdaPcbsFromCurrentProject(): Promise<void> {
+		const projectApi = edaApi?.dmt_Project;
+		const pcbTreeApi = edaApi?.dmt_Pcb;
+		const boardApi = edaApi?.dmt_Board;
+		const editorApi = edaApi?.dmt_EditorControl;
+		const selectApi = edaApi?.dmt_SelectControl;
+		const bomApi = edaApi?.pcb_ManufactureData;
+		if (
+			!projectApi ||
+			typeof projectApi.getCurrentProjectInfo !== 'function' ||
+			!pcbTreeApi ||
+			typeof pcbTreeApi.getAllPcbsInfo !== 'function' ||
+			!editorApi ||
+			typeof editorApi.openDocument !== 'function' ||
+			!bomApi ||
+			typeof bomApi.getBomFile !== 'function'
+		) {
+			throw new Error(
+				t(
+					'当前 EDA 版本不支持整工程批量 BOM 导入。请先在“环境自检”中确认 dmt_Project / dmt_Pcb / dmt_EditorControl / pcb_ManufactureData 可用。',
+					'This EDA build does not support batch project BOM import. Verify dmt_Project / dmt_Pcb / dmt_EditorControl / pcb_ManufactureData in SelfCheck.',
+				),
+			);
+		}
+
+		const snapshot = await refreshCurrentEdaSnapshot({ silent: true });
+		const projectInfo = await projectApi.getCurrentProjectInfo();
+		if (!projectInfo) {
+			throw new Error(t('未读取到当前工程信息。', 'Cannot read the current project.'));
+		}
+		const sourcePcbs = sort(await pcbTreeApi.getAllPcbsInfo(), (item) => `${item.parentBoardName || ''}${item.name || ''}`);
+		if (!sourcePcbs.length) {
+			throw new Error(t('当前工程内没有可导入的 PCB。', 'No PCB found in the current project.'));
+		}
+
+		const boardList =
+			boardApi && typeof boardApi.getAllBoardsInfo === 'function'
+				? await boardApi.getAllBoardsInfo().catch(() => [])
+				: [];
+		const boardByPcbUuid = new Map();
+		for (const board of boardList) {
+			const pcbUuid = String(board?.pcb?.uuid || '').trim();
+			if (pcbUuid) boardByPcbUuid.set(pcbUuid, board);
+		}
+
+		setStatus(
+			'info',
+			t(
+				`正在同步当前工程的 ${sourcePcbs.length} 个 PCB，请勿切换编辑器焦点...`,
+				`Syncing ${sourcePcbs.length} PCB documents from the current project. Please keep the editor focused...`,
+			),
+		);
+		render();
+
+		const importedAt = new Date().toLocaleString(locale(), { hour12: false });
+		const targetProject = upsertSyncedProjectFromCurrent(projectInfo, snapshot, importedAt);
+		const originalDoc =
+			selectApi && typeof selectApi.getCurrentDocumentInfo === 'function'
+				? await selectApi.getCurrentDocumentInfo().catch(() => undefined)
+				: undefined;
+		const openTabIdsBefore = await getOpenTabIdSet();
+		let syncedPcbs = 0;
+		let createdPcbs = 0;
+		let createdComponents = 0;
+		let createdBomItems = 0;
+		const failures = [];
+
+		for (const sourcePcb of sourcePcbs) {
+			const sourcePcbUuid = String(sourcePcb?.uuid || '').trim();
+			if (!sourcePcbUuid) continue;
+			const boardInfo = boardByPcbUuid.get(sourcePcbUuid) || null;
+			const projectLabel = currentProjectLabelFromInfo(projectInfo, snapshot);
+			const pcbLabel = currentPcbLabelFromInfo(sourcePcb, boardInfo, snapshot) || t('未命名 PCB', 'Untitled PCB');
+			const boardLabel = currentBoardLabelFromInfo(boardInfo, sourcePcb, snapshot);
+			let tabId = '';
+			try {
+				tabId = String((await editorApi.openDocument(sourcePcbUuid)) || '');
+				if (!tabId) throw new Error(t('无法打开 PCB 文档。', 'Cannot open the PCB document.'));
+				if (typeof editorApi.activateDocument === 'function') {
+					await editorApi.activateDocument(tabId).catch(() => undefined);
+				}
+				await sleep(180);
+				const bomFile = await bomApi.getBomFile(`eda-bom-${safeFileStem(pcbLabel)}`, 'csv');
+				if (!bomFile) throw new Error(t('未生成 BOM 文件。', 'No BOM file returned.'));
+				const grouped = groupBomRows(parseDelimitedTable(await bomFile.text()));
+				let targetPcb = state.db.pcbs.find(
+					(item) => item.sourceKind === 'eda-project-sync' && item.sourcePcbUuid === sourcePcbUuid,
+				);
+				const payload = {
+					...(targetPcb || {}),
+					id: targetPcb?.id || id(),
+					projectId: targetProject.id,
+					name: pcbLabel,
+					version: targetPcb?.version || '',
+					boardQuantity: Number(targetPcb?.boardQuantity || 1),
+					note: buildEdaPcbNoteText({
+						mode: 'project-sync',
+						projectLabel,
+						boardLabel,
+						pcbLabel,
+						importedAt,
+					}),
+					sourceKind: 'eda-project-sync',
+					sourceProjectUuid: String(projectInfo?.uuid || snapshot?.projectUuid || '').trim() || undefined,
+					sourcePcbUuid,
+					sourcePcbName: pcbLabel || undefined,
+					sourceBoardName: boardLabel || undefined,
+					sourceImportedAt: iso(),
+					items: [],
+					createdAt: targetPcb?.createdAt || iso(),
+					updatedAt: iso(),
+				};
+				if (targetPcb) {
+					Object.assign(targetPcb, nPcb(payload));
+					syncedPcbs += 1;
+				} else {
+					targetPcb = nPcb(payload);
+					state.db.pcbs.push(targetPcb);
+					createdPcbs += 1;
+				}
+				const counts = replacePcbBomItemsFromGroups(targetPcb, grouped);
+				createdComponents += counts.createdComponents;
+				createdBomItems += counts.createdBomItems;
+			} catch (error) {
+				failures.push({
+					name: pcbLabel,
+					message: error instanceof Error ? error.message : String(error),
+				});
+			} finally {
+				if (tabId && !openTabIdsBefore.has(tabId) && typeof editorApi.closeDocument === 'function') {
+					await editorApi.closeDocument(tabId).catch(() => undefined);
+				}
+			}
+		}
+
+		if (originalDoc?.uuid) {
+			try {
+				const restoreTabId = await editorApi.openDocument(originalDoc.uuid);
+				if (restoreTabId && typeof editorApi.activateDocument === 'function') {
+					await editorApi.activateDocument(restoreTabId).catch(() => undefined);
+				}
+			} catch (_error) {}
+		}
+
+		const successCount = syncedPcbs + createdPcbs;
+		if (!successCount) {
+			const reason = failures[0]?.message || t('没有任何 PCB 同步成功。', 'No PCB was synced successfully.');
+			throw new Error(reason);
+		}
+
+		state.db = nDb(state.db);
+		await saveDb();
+		state.view = 'projects';
+		state.projectFilter = targetProject.id;
+		state.modal = null;
+		const failureSuffix =
+			failures.length > 0
+				? t(
+						`；失败 ${failures.length} 个（如：${failures.slice(0, 2).map((item) => item.name).join('、')}）`,
+						`; ${failures.length} failed (e.g. ${failures.slice(0, 2).map((item) => item.name).join(', ')})`,
+					)
+				: '';
+		setStatus(
+			'success',
+			t(
+				`整工程 BOM 同步完成：新增 PCB ${createdPcbs} 个、更新 PCB ${syncedPcbs} 个、新增元器件 ${createdComponents} 个、写入 BOM 明细 ${createdBomItems} 条${failureSuffix}。`,
+				`Project BOM sync finished: ${createdPcbs} PCB created, ${syncedPcbs} PCB updated, ${createdComponents} components created, ${createdBomItems} BOM items written${failureSuffix}.`,
+			),
+		);
+		render();
+	}
+
+	async function openSourcePcb(pluginPcbId): Promise<void> {
+		const pcb = state.db.pcbs.find((item) => item.id === pluginPcbId);
+		if (!pcb || !pcb.sourcePcbUuid) {
+			throw new Error(t('该 PCB 未关联到 EDA 工程内的 PCB。', 'This PCB is not linked to an EDA PCB document.'));
+		}
+		const editorApi = edaApi?.dmt_EditorControl;
+		if (!editorApi || typeof editorApi.openDocument !== 'function') {
+			throw new Error(t('当前 EDA 版本未提供打开文档能力。', 'This EDA build cannot open editor documents.'));
+		}
+		const tabId = await editorApi.openDocument(pcb.sourcePcbUuid);
+		if (!tabId) throw new Error(t('打开对应 PCB 失败。', 'Failed to open the linked PCB.'));
+		if (typeof editorApi.activateDocument === 'function') {
+			await editorApi.activateDocument(tabId).catch(() => undefined);
+		}
+		setStatus('success', t(`已打开对应 PCB：${pcb.name}`, `Opened linked PCB: ${pcb.name}`));
 		render();
 	}
 
@@ -1987,6 +2323,7 @@
 				state.status = '';
 				if (action === 'view') { state.view = target.dataset.view || 'dashboard'; render(); return; }
 				if (action === 'refresh-eda-snapshot') return refreshCurrentEdaSnapshot();
+				if (action === 'import-eda-project-bom') return importAllEdaPcbsFromCurrentProject();
 				if (action === 'import') return importData();
 				if (action === 'import-eda-bom') return importEdaBomFromCurrent();
 				if (action === 'export-json') return exportJson();
@@ -2008,6 +2345,7 @@
 				if (action === 'delete-project') return deleteProject(target.dataset.id);
 				if (action === 'cancel-pcb') { state.editingPcbId = null; render(); return; }
 				if (action === 'edit-pcb') { state.view = 'projects'; state.editingPcbId = target.dataset.id; render(); return; }
+				if (action === 'open-source-pcb') return openSourcePcb(target.dataset.pcbId);
 				if (action === 'delete-pcb') return deletePcb(target.dataset.id);
 				if (action === 'bom-modal') { state.modal = { type: 'bom', pcbId: target.dataset.pcbId, itemId: target.dataset.itemId || null }; render(); return; }
 				if (action === 'delete-bom-item') return deleteBomItem(target.dataset.pcbId, target.dataset.itemId);
