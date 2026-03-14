@@ -60,46 +60,8 @@ export async function openBomManager(): Promise<void> {
 		return;
 	}
 
-	const fileExists = await (async () => {
-		try {
-			const fsApi = (eda as any)?.sys_FileSystem;
-			if (!fsApi || typeof fsApi.getExtensionFile !== 'function') {
-				return {
-					indexSlash: undefined as boolean | undefined,
-					indexNoSlash: undefined as boolean | undefined,
-					indexAbsSlash: undefined as boolean | undefined,
-					indexAbsNoSlash: undefined as boolean | undefined,
-					appJs: undefined as boolean | undefined,
-					styles: undefined as boolean | undefined,
-				};
-			}
-			const [a, b, a2, b2, js, css] = await Promise.all([
-				fsApi.getExtensionFile('/iframe/index.html').catch(() => undefined),
-				fsApi.getExtensionFile('iframe/index.html').catch(() => undefined),
-				fsApi.getExtensionFile('/iframe/index.abs.html').catch(() => undefined),
-				fsApi.getExtensionFile('iframe/index.abs.html').catch(() => undefined),
-				fsApi.getExtensionFile('/iframe/app.js').catch(() => undefined),
-				fsApi.getExtensionFile('/iframe/styles.css').catch(() => undefined),
-			]);
-			return {
-				indexSlash: Boolean(a),
-				indexNoSlash: Boolean(b),
-				indexAbsSlash: Boolean(a2),
-				indexAbsNoSlash: Boolean(b2),
-				appJs: Boolean(js),
-				styles: Boolean(css),
-			};
-		} catch {
-			return {
-				indexSlash: undefined as boolean | undefined,
-				indexNoSlash: undefined as boolean | undefined,
-				indexAbsSlash: undefined as boolean | undefined,
-				indexAbsNoSlash: undefined as boolean | undefined,
-				appJs: undefined as boolean | undefined,
-				styles: undefined as boolean | undefined,
-			};
-		}
-	})();
+	// NOTE: we intentionally avoid calling getExtensionFile() during normal open path,
+	// because IndexedDB-backed resource reads can be slow on some clients.
 
 	const closeIfExists = async () => {
 		try {
@@ -125,14 +87,14 @@ export async function openBomManager(): Promise<void> {
 		const unique = Array.from(new Set(htmlVariants));
 		const out: Array<{ label: string; run: () => Promise<boolean> }> = [];
 		for (const h of unique) {
-			// 3-args is the most compatible signature across client builds.
-			out.push({ label: `3-args ${h} ${width}x${height}`, run: async () => openAny(h, width, height) });
+			// Prefer a stable id so we can verify "opened" quickly on buggy builds.
+			out.push({ label: `5-args id+props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID, props) });
 			// Some builds accept an id as 4th arg.
 			out.push({ label: `4-args id ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID) });
 			// Some builds accept props as 4th arg (older signature).
 			out.push({ label: `4-args props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, props) });
-			// Newer signature: (html,w,h,id,props)
-			out.push({ label: `5-args id+props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID, props) });
+			// 3-args is the most compatible signature across client builds, but may not be closable by id.
+			out.push({ label: `3-args ${h} ${width}x${height}`, run: async () => openAny(h, width, height) });
 		}
 		return out;
 	};
@@ -186,16 +148,23 @@ export async function openBomManager(): Promise<void> {
 			const ok = await attempt.run();
 
 			// openIFrame() boolean is not reliable on some client versions.
-			// For speed, we only wait briefly for the iframe boot receipt.
-			const storageBooted = await waitForIframeBootTs(requestTs, 1200);
-			const booted = Boolean(ok) || storageBooted;
-
-			if (booted) {
+			// If the dialog is actually opened (by id), return immediately for speed.
+			const opened = Boolean(ok) || (ok === false && (await isActuallyOpened()));
+			if (opened) {
 				try {
 					eda.sys_Log?.add?.(
-						`openBomManager ok via ${attempt.label} (ok=${String(ok)} storageBooted=${String(storageBooted)})`,
+						`openBomManager ok via ${attempt.label} (ok=${String(ok)} opened=${String(opened)})`,
 						'info' as any,
 					);
+				} catch {}
+				return;
+			}
+
+			// As a fallback (e.g. 3-args open without id), wait briefly for the iframe boot receipt.
+			const storageBooted = await waitForIframeBootTs(requestTs, 1200);
+			if (storageBooted) {
+				try {
+					eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (ok=${String(ok)} storageBooted=true)`, 'info' as any);
 				} catch {}
 				return;
 			}
@@ -217,12 +186,11 @@ export async function openBomManager(): Promise<void> {
 			} catch {}
 		} catch (error) {
 			lastError = error;
-			// If an exception is thrown, still check whether the window got created.
 			try {
-				// Even if openIFrame threw, still consider it success only if the iframe app booted.
-				if (requestTs > 0 && (await waitForIframeBootTs(requestTs, 1200))) {
+				// Even if openIFrame threw, the dialog might still have been created.
+				if (await isActuallyOpened()) {
 					try {
-						eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (threw but booted)`, 'warn' as any);
+						eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (threw but opened)`, 'warn' as any);
 					} catch {}
 					return;
 				}
@@ -250,6 +218,47 @@ export async function openBomManager(): Promise<void> {
 			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-error');
 		} catch {
 			return undefined;
+		}
+	})();
+
+	const fileExists = await (async () => {
+		try {
+			const fsApi = (eda as any)?.sys_FileSystem;
+			if (!fsApi || typeof fsApi.getExtensionFile !== 'function') {
+				return {
+					indexSlash: undefined as boolean | undefined,
+					indexNoSlash: undefined as boolean | undefined,
+					indexAbsSlash: undefined as boolean | undefined,
+					indexAbsNoSlash: undefined as boolean | undefined,
+					appJs: undefined as boolean | undefined,
+					styles: undefined as boolean | undefined,
+				};
+			}
+			const [a, b, a2, b2, js, css] = await Promise.all([
+				fsApi.getExtensionFile('/iframe/index.html').catch(() => undefined),
+				fsApi.getExtensionFile('iframe/index.html').catch(() => undefined),
+				fsApi.getExtensionFile('/iframe/index.abs.html').catch(() => undefined),
+				fsApi.getExtensionFile('iframe/index.abs.html').catch(() => undefined),
+				fsApi.getExtensionFile('/iframe/app.js').catch(() => undefined),
+				fsApi.getExtensionFile('/iframe/styles.css').catch(() => undefined),
+			]);
+			return {
+				indexSlash: Boolean(a),
+				indexNoSlash: Boolean(b),
+				indexAbsSlash: Boolean(a2),
+				indexAbsNoSlash: Boolean(b2),
+				appJs: Boolean(js),
+				styles: Boolean(css),
+			};
+		} catch {
+			return {
+				indexSlash: undefined as boolean | undefined,
+				indexNoSlash: undefined as boolean | undefined,
+				indexAbsSlash: undefined as boolean | undefined,
+				indexAbsNoSlash: undefined as boolean | undefined,
+				appJs: undefined as boolean | undefined,
+				styles: undefined as boolean | undefined,
+			};
 		}
 	})();
 
