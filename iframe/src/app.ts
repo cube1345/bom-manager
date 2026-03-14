@@ -280,12 +280,37 @@
 		return { types: (db.types || []).map(nType), components: (db.components || []).map(nComponent), projects: (db.projects || []).map(nProject), pcbs: (db.pcbs || []).map(nPcb), stores: (db.stores || []).map(nStore) };
 	}
 
+	function defaultFeatureFlags() {
+		return {
+			showEdaSnapshot: true,
+			enableCurrentPcbImport: true,
+			enableProjectBatchImport: true,
+			enableOpenSourcePcb: true,
+			enablePurchaseView: true,
+			enableStoresView: true,
+			autoLoadEdaSnapshot: false,
+		};
+	}
+	function normalizePrefs(input) {
+		const raw = input && typeof input === 'object' ? input : {};
+		const rawFeatures = raw.features && typeof raw.features === 'object' ? raw.features : {};
+		const defaults = defaultFeatureFlags();
+		const features = {};
+		for (const [key, defaultValue] of Object.entries(defaults)) {
+			features[key] = typeof rawFeatures[key] === 'boolean' ? rawFeatures[key] : defaultValue;
+		}
+		return {
+			lang: raw?.lang === 'en' ? 'en' : 'zh',
+			theme: raw?.theme === 'dark' ? 'dark' : 'light',
+			features,
+		};
+	}
+
 	function loadPrefs() {
 		try {
-			const value = edaApi.sys_Storage.getExtensionUserConfig(PREFS_KEY);
-			return { lang: value?.lang === 'en' ? 'en' : 'zh', theme: value?.theme === 'dark' ? 'dark' : 'light' };
+			return normalizePrefs(edaApi.sys_Storage.getExtensionUserConfig(PREFS_KEY));
 		} catch (_error) {
-			return { lang: 'zh', theme: 'light' };
+			return normalizePrefs();
 		}
 	}
 	function loadDb() {
@@ -376,6 +401,16 @@
 	function storeMap() {
 		return new Map(state.db.stores.map((item) => [item.id, item]));
 	}
+	function featureEnabled(key) {
+		return Boolean(state.prefs?.features?.[key]);
+	}
+	function hasAnyEdaEntryEnabled() {
+		return featureEnabled('showEdaSnapshot') || featureEnabled('enableCurrentPcbImport') || featureEnabled('enableProjectBatchImport');
+	}
+	function normalizeActiveView() {
+		if (state.view === 'purchase' && !featureEnabled('enablePurchaseView')) state.view = 'dashboard';
+		if (state.view === 'stores' && !featureEnabled('enableStoresView')) state.view = 'dashboard';
+	}
 	function warning(component) {
 		return component.warningThreshold > 0 && component.totalQuantity <= component.warningThreshold;
 	}
@@ -383,16 +418,38 @@
 		return idValue ? state.db[name].find((item) => item.id === idValue) || null : null;
 	}
 	function header() {
-		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'BOM Manager'))}</h1><p class="hero-copy">${e(t('在插件窗口中统一维护类型、元器件、采购记录、项目、PCB 与 BOM。', 'Manage types, components, purchase records, projects, PCB and BOM in one place.'))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="import-eda-bom">${e(t('从当前工程导入 BOM', 'Import BOM from EDA'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button></div></header>`;
+		const actionButtons = [
+			`<button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button>`,
+			featureEnabled('enableCurrentPcbImport')
+				? `<button class="ghost-button" data-action="import-eda-bom">${e(t('从当前工程导入 BOM', 'Import BOM from EDA'))}</button>`
+				: '',
+			featureEnabled('enableProjectBatchImport')
+				? `<button class="ghost-button" data-action="import-eda-project-bom">${e(t('整工程批量导入', 'Batch Import Project'))}</button>`
+				: '',
+			`<button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button>`,
+			`<button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button>`,
+		]
+			.filter(Boolean)
+			.join('');
+		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'BOM Manager'))}</h1><p class="hero-copy">${e(t('在插件窗口中统一维护类型、元器件、采购记录、项目、PCB 与 BOM。', 'Manage types, components, purchase records, projects, PCB and BOM in one place.'))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
 	}
 	function nav() {
-		const items = [['dashboard', '概览', 'Overview'], ['components', '元器件', 'Components'], ['types', '类型', 'Types'], ['projects', '项目/PCB', 'Projects/PCB'], ['purchase', '采购清单', 'Purchase'], ['stores', '店铺', 'Stores'], ['settings', '设置', 'Settings']];
+		const items = [
+			['dashboard', '概览', 'Overview'],
+			['components', '元器件', 'Components'],
+			['types', '类型', 'Types'],
+			['projects', '项目/PCB', 'Projects/PCB'],
+			featureEnabled('enablePurchaseView') ? ['purchase', '采购清单', 'Purchase'] : null,
+			featureEnabled('enableStoresView') ? ['stores', '店铺', 'Stores'] : null,
+			['settings', '设置', 'Settings'],
+		].filter(Boolean);
 		return `<nav class="nav-strip">${items.map(([idValue, zh, en]) => `<button class="nav-link ${state.view === idValue ? 'active' : ''}" data-action="view" data-view="${idValue}">${e(t(zh, en))}</button>`).join('')}</nav>`;
 	}
 	function status() {
 		return state.status ? `<div class="status-banner status-${e(state.statusKind)}">${e(state.status)}</div>` : '';
 	}
 	function currentEdaSnapshotCard() {
+		if (!featureEnabled('showEdaSnapshot')) return '';
 		const snapshot = state.edaSnapshot;
 		const projectLabel = projectDisplayNameFromSnapshot(snapshot);
 		const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
@@ -406,10 +463,22 @@
 		const details = snapshot
 			? `<div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectLabel || '-')}</strong></div><div><span>${e(t('当前 PCB', 'Current PCB'))}</span><strong>${e(pcbLabel || '-')}</strong></div><div><span>${e(t('当前板子', 'Current Board'))}</span><strong>${e(boardLabel || '-')}</strong></div><div><span>${e(t('工程条目', 'Project Items'))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ''}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`工程链接名：${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ''}${snapshot.schematicName ? `<li>${e(t(`当前原理图：${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ''}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ''}</ul>`
 			: `<p class="empty-state">${e(t('切换到已打开的工程后点击“读取当前工程快照”，插件会读取当前工程、PCB 与板子信息。', 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
-		return `<article class="panel-card"><div class="section-head"><h2>${e(t('当前工程快照', 'Current Design Snapshot'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button><button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('整工程批量导入', 'Batch Import Project'))}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t('导入当前 PCB BOM', 'Import Current PCB BOM'))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
+		const buttons = [
+			`<button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button>`,
+			featureEnabled('enableProjectBatchImport')
+				? `<button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('整工程批量导入', 'Batch Import Project'))}</button>`
+				: '',
+			featureEnabled('enableCurrentPcbImport')
+				? `<button class="primary-button" type="button" data-action="import-eda-bom">${e(t('导入当前 PCB BOM', 'Import Current PCB BOM'))}</button>`
+				: '',
+		]
+			.filter(Boolean)
+			.join('');
+		return `<article class="panel-card"><div class="section-head"><h2>${e(t('当前工程快照', 'Current Design Snapshot'))}</h2><div class="inline-actions">${buttons}</div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
 	}
 
 	function render() {
+		normalizeActiveView();
 		document.documentElement.setAttribute('data-theme', state.prefs.theme);
 		app.innerHTML = `<div class="app-shell">${header()}${nav()}${status()}<main class="page-content">${view()}</main>${modal()}</div>`;
 	}
@@ -428,7 +497,16 @@
 		const warningCount = state.db.components.filter(warning).length;
 		const recordCount = state.db.components.reduce((sum, item) => sum + item.records.length, 0);
 		const bomCount = state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0);
-		return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t('元器件', 'Components'))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t('库存预警', 'Warnings'))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t('采购记录', 'Records'))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t('BOM 明细', 'BOM Items'))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t('快速入口', 'Quick Actions'))}</h2><div class="quick-actions"><button class="primary-button" data-action="view" data-view="components">${e(t('新增元器件', 'Add Component'))}</button><button class="ghost-button" data-action="view" data-view="projects">${e(t('维护项目/PCB', 'Manage Projects/PCB'))}</button><button class="ghost-button" data-action="view" data-view="stores">${e(t('维护店铺', 'Manage Stores'))}</button></div></article>${currentEdaSnapshotCard()}</section><section class="panel-card"><h2>${e(t('使用提示', 'Tips'))}</h2><ul class="info-list"><li>${e(t('建议定期导出 JSON 做离线备份。', 'Export JSON regularly for offline backup.'))}</li><li>${e(t('跨设备/跨账号可用导入恢复。', 'Use Import to restore across devices/accounts.'))}</li><li>${e(t('需要导入当前工程 BOM 时，先读取工程快照可以更直观看到将要写入的工程/PCB 来源。', 'Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM.'))}</li></ul></section>`;
+		const quickActions = [
+			`<button class="primary-button" data-action="view" data-view="components">${e(t('新增元器件', 'Add Component'))}</button>`,
+			`<button class="ghost-button" data-action="view" data-view="projects">${e(t('维护项目/PCB', 'Manage Projects/PCB'))}</button>`,
+			featureEnabled('enableStoresView') ? `<button class="ghost-button" data-action="view" data-view="stores">${e(t('维护店铺', 'Manage Stores'))}</button>` : '',
+			featureEnabled('enablePurchaseView') ? `<button class="ghost-button" data-action="view" data-view="purchase">${e(t('查看采购清单', 'Open Purchase List'))}</button>` : '',
+		]
+			.filter(Boolean)
+			.join('');
+		const snapshotCard = currentEdaSnapshotCard();
+		return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t('元器件', 'Components'))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t('库存预警', 'Warnings'))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t('采购记录', 'Records'))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t('BOM 明细', 'BOM Items'))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t('快速入口', 'Quick Actions'))}</h2><div class="quick-actions">${quickActions}</div></article>${snapshotCard}</section><section class="panel-card"><h2>${e(t('使用提示', 'Tips'))}</h2><ul class="info-list"><li>${e(t('建议定期导出 JSON 做离线备份。', 'Export JSON regularly for offline backup.'))}</li><li>${e(t('跨设备/跨账号可用导入恢复。', 'Use Import to restore across devices/accounts.'))}</li><li>${e(t('窗口标题栏现在支持最大化与最小化；如窗口被最小化，再次点击插件菜单即可恢复显示。', 'The iframe window now supports maximize and minimize. If it is minimized, click the plugin menu again to restore it.'))}</li><li>${e(t('需要导入当前工程 BOM 时，先读取工程快照可以更直观看到将要写入的工程/PCB 来源。', 'Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM.'))}</li></ul></section>`;
 	}
 
 	function typesView() {
@@ -458,7 +536,7 @@
 		const pcbs = state.projectFilter === 'all' ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === state.projectFilter);
 		const summary = new Map();
 		pcbs.forEach((pcb) => pcb.items.forEach((item) => { if (!summary.has(item.componentId)) summary.set(item.componentId, { total: 0, names: new Set() }); const row = summary.get(item.componentId); row.total += item.quantityPerBoard * pcb.boardQuantity; row.names.add(`${pMap.get(pcb.projectId)?.name || ''}/${pcb.name}`); }));
-		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t('编辑项目', 'Edit Project') : t('新增项目', 'New Project'))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e(currentProject?.id || '')}" /><label><span>${e(t('项目名称', 'Project Name'))}</span><input name="name" required value="${e(currentProject?.name || '')}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentProject?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t('编辑 PCB', 'Edit PCB') : t('新增 PCB', 'New PCB'))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e(currentPcb?.id || '')}" /><label><span>${e(t('所属项目', 'Project'))}</span><select name="projectId" required><option value="">${e(t('请选择项目', 'Select project'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${currentPcb?.projectId === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></label><label><span>${e(t('PCB 名称', 'PCB Name'))}</span><input name="name" required value="${e(currentPcb?.name || '')}" /></label><label><span>${e(t('版本号', 'Version'))}</span><input name="version" value="${e(currentPcb?.version || '')}" /></label><label><span>${e(t('项目用板数量', 'Board Qty'))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e(currentPcb?.boardQuantity || 1)}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentPcb?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t('需求统计', 'Requirement Summary'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('同步当前工程全部 PCB', 'Sync All PCB from Current Project'))}</button><select data-filter="project-filter"><option value="all">${e(t('全部项目', 'All Projects'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></div></div><div class="table-wrap"><table><thead><tr><th>${e(t('类型', 'Type'))}</th><th>${e(t('型号', 'Model'))}</th><th>${e(t('总需求', 'Demand'))}</th><th>${e(t('涉及 PCB', 'PCB'))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => (cMap.get(a[0])?.model || '').localeCompare(cMap.get(b[0])?.model || '', locale())).map(([componentId, info]) => `<tr><td>${e(tMap.get(cMap.get(componentId)?.typeId)?.name || t('未知类型', 'Unknown Type'))}</td><td>${e(cMap.get(componentId)?.model || t('未知元器件', 'Unknown Component'))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t('，', ', ')))}</td></tr>`).join('') || `<tr><td colspan="4" class="empty-state">${e(t('暂无统计数据。', 'No summary data.'))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t('项目与 PCB', 'Projects and PCB'))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === 'all' || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t('无项目备注', 'No note'))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t('删除', 'Delete'))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ''}`)}</strong><p>${e(t(`项目数量 ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p>${pcb.sourcePcbUuid ? `<p class="support-text">${e(`${t('关联 EDA PCB', 'Linked EDA PCB')}: ${pcb.sourceBoardName ? `${pcb.sourceBoardName} / ` : ''}${pcb.sourcePcbName || pcb.name}`)}</p>` : ''}</div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t('维护 BOM', 'Manage BOM'))}</button>${pcb.sourcePcbUuid ? `<button class="ghost-button" type="button" data-action="open-source-pcb" data-pcb-id="${pcb.id}">${e(t('打开对应 PCB', 'Open Source PCB'))}</button>` : ''}<button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t('删除', 'Delete'))}</button></div></div>`).join('') || `<p class="empty-state">${e(t('暂无 PCB。', 'No PCB.'))}</p>`}</div></article>`).join('') || `<p class="empty-state">${e(t('暂无项目数据。', 'No project data.'))}</p>`}</div></section>`;
+		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t('编辑项目', 'Edit Project') : t('新增项目', 'New Project'))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e(currentProject?.id || '')}" /><label><span>${e(t('项目名称', 'Project Name'))}</span><input name="name" required value="${e(currentProject?.name || '')}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentProject?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t('编辑 PCB', 'Edit PCB') : t('新增 PCB', 'New PCB'))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e(currentPcb?.id || '')}" /><label><span>${e(t('所属项目', 'Project'))}</span><select name="projectId" required><option value="">${e(t('请选择项目', 'Select project'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${currentPcb?.projectId === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></label><label><span>${e(t('PCB 名称', 'PCB Name'))}</span><input name="name" required value="${e(currentPcb?.name || '')}" /></label><label><span>${e(t('版本号', 'Version'))}</span><input name="version" value="${e(currentPcb?.version || '')}" /></label><label><span>${e(t('项目用板数量', 'Board Qty'))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e(currentPcb?.boardQuantity || 1)}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentPcb?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t('需求统计', 'Requirement Summary'))}</h2><div class="inline-actions">${featureEnabled('enableProjectBatchImport') ? `<button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('同步当前工程全部 PCB', 'Sync All PCB from Current Project'))}</button>` : ''}<select data-filter="project-filter"><option value="all">${e(t('全部项目', 'All Projects'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></div></div><div class="table-wrap"><table><thead><tr><th>${e(t('类型', 'Type'))}</th><th>${e(t('型号', 'Model'))}</th><th>${e(t('总需求', 'Demand'))}</th><th>${e(t('涉及 PCB', 'PCB'))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => (cMap.get(a[0])?.model || '').localeCompare(cMap.get(b[0])?.model || '', locale())).map(([componentId, info]) => `<tr><td>${e(tMap.get(cMap.get(componentId)?.typeId)?.name || t('未知类型', 'Unknown Type'))}</td><td>${e(cMap.get(componentId)?.model || t('未知元器件', 'Unknown Component'))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t('，', ', ')))}</td></tr>`).join('') || `<tr><td colspan="4" class="empty-state">${e(t('暂无统计数据。', 'No summary data.'))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t('项目与 PCB', 'Projects and PCB'))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === 'all' || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t('无项目备注', 'No note'))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t('删除', 'Delete'))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ''}`)}</strong><p>${e(t(`项目数量 ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p>${pcb.sourcePcbUuid ? `<p class="support-text">${e(`${t('关联 EDA PCB', 'Linked EDA PCB')}: ${pcb.sourceBoardName ? `${pcb.sourceBoardName} / ` : ''}${pcb.sourcePcbName || pcb.name}`)}</p>` : ''}</div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t('维护 BOM', 'Manage BOM'))}</button>${featureEnabled('enableOpenSourcePcb') && pcb.sourcePcbUuid ? `<button class="ghost-button" type="button" data-action="open-source-pcb" data-pcb-id="${pcb.id}">${e(t('打开对应 PCB', 'Open Source PCB'))}</button>` : ''}<button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t('删除', 'Delete'))}</button></div></div>`).join('') || `<p class="empty-state">${e(t('暂无 PCB。', 'No PCB.'))}</p>`}</div></article>`).join('') || `<p class="empty-state">${e(t('暂无项目数据。', 'No project data.'))}</p>`}</div></section>`;
 	}
 	
 
@@ -548,7 +626,9 @@
 	}
 
 	function settingsView() {
-		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t('界面偏好', 'Preferences'))}</h2><form id="prefs-form" class="stack-form"><label><span>${e(t('语言', 'Language'))}</span><select name="lang"><option value="zh" ${state.prefs.lang === 'zh' ? 'selected' : ''}>中文</option><option value="en" ${state.prefs.lang === 'en' ? 'selected' : ''}>English</option></select></label><label><span>${e(t('主题', 'Theme'))}</span><select name="theme"><option value="light" ${state.prefs.theme === 'light' ? 'selected' : ''}>${e(t('亮色', 'Light'))}</option><option value="dark" ${state.prefs.theme === 'dark' ? 'selected' : ''}>${e(t('暗色', 'Dark'))}</option></select></label><button class="primary-button" type="submit">${e(t('保存偏好', 'Save'))}</button></form></article><article class="panel-card"><h2>${e(t('插件存储', 'Plugin Storage'))}</h2><ul class="info-list"><li>${e(t(`当前共 ${state.db.types.length} 个类型、${state.db.components.length} 个元器件、${state.db.projects.length} 个项目。`, `Current totals: ${state.db.types.length} types, ${state.db.components.length} components, ${state.db.projects.length} projects.`))}</li></ul><div class="inline-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button><button class="danger-button" data-action="reset">${e(t('重置数据', 'Reset Data'))}</button></div></article></section>`;
+		const features = { ...defaultFeatureFlags(), ...(state.prefs.features || {}) };
+		const toggleRow = (name, labelZh, labelEn, descZh, descEn) => `<div class="stack-list"><label class="checkbox-row"><input type="checkbox" name="${name}" ${features[name] ? 'checked' : ''} /><span>${e(t(labelZh, labelEn))}</span></label><p class="support-text">${e(t(descZh, descEn))}</p></div>`;
+		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t('界面偏好', 'Preferences'))}</h2><form id="prefs-form" class="stack-form"><label><span>${e(t('语言', 'Language'))}</span><select name="lang"><option value="zh" ${state.prefs.lang === 'zh' ? 'selected' : ''}>中文</option><option value="en" ${state.prefs.lang === 'en' ? 'selected' : ''}>English</option></select></label><label><span>${e(t('主题', 'Theme'))}</span><select name="theme"><option value="light" ${state.prefs.theme === 'light' ? 'selected' : ''}>${e(t('亮色', 'Light'))}</option><option value="dark" ${state.prefs.theme === 'dark' ? 'selected' : ''}>${e(t('暗色', 'Dark'))}</option></select></label><div class="subsection-head"><h3>${e(t('EDA 集成功能', 'EDA Integration'))}</h3></div>${toggleRow('showEdaSnapshot', '显示当前工程快照卡片', 'Show current design snapshot', '在首页显示当前工程、PCB、板子信息和刷新入口。', 'Show current project, PCB, board info and refresh actions on the dashboard.')}${toggleRow('enableCurrentPcbImport', '启用当前 PCB BOM 导入', 'Enable current PCB BOM import', '保留“从当前工程导入 BOM”和“导入当前 PCB BOM”入口。', 'Keep the current-PCB BOM import actions available.')}${toggleRow('enableProjectBatchImport', '启用整工程批量导入', 'Enable project batch import', '保留“整工程批量导入”入口，可同步当前工程下全部 PCB。', 'Keep the batch-import action to sync all PCB under the current project.')}${toggleRow('enableOpenSourcePcb', '启用“打开对应 PCB”', 'Enable open source PCB action', '在项目页为已关联宿主 PCB 的记录显示“一键打开对应 PCB”。', 'Show the one-click open action for PCB entries linked to JLCEDA documents.')}${toggleRow('autoLoadEdaSnapshot', '启动时自动读取工程快照', 'Auto load snapshot on startup', '插件打开时自动尝试读取当前工程上下文；失败时可手动刷新。', 'Try to read the current design context when the plugin opens; you can still refresh manually if it fails.')}<div class="subsection-head"><h3>${e(t('页面功能', 'Views'))}</h3></div>${toggleRow('enablePurchaseView', '启用采购清单页面', 'Enable purchase view', '显示采购清单导航、快捷入口和导出能力。', 'Show the purchase list page, shortcuts and export actions.')}${toggleRow('enableStoresView', '启用店铺页面', 'Enable stores view', '显示店铺维护页面，便于管理供应商与采购记录。', 'Show the stores page for supplier and purchase-record management.')}<button class="primary-button" type="submit">${e(t('保存偏好', 'Save'))}</button></form></article><article class="panel-card"><h2>${e(t('插件存储', 'Plugin Storage'))}</h2><ul class="info-list"><li>${e(t(`当前共 ${state.db.types.length} 个类型、${state.db.components.length} 个元器件、${state.db.projects.length} 个项目。`, `Current totals: ${state.db.types.length} types, ${state.db.components.length} components, ${state.db.projects.length} projects.`))}</li><li>${e(t('窗口标题栏已支持最大化与最小化；窗口最小化后，再点击插件菜单可恢复。', 'The window title bar now supports maximize and minimize. Click the plugin menu again to restore a minimized window.'))}</li></ul><div class="inline-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button><button class="danger-button" data-action="reset">${e(t('重置数据', 'Reset Data'))}</button></div></article></section>`;
 	}
 
 	function modal() {
@@ -2375,7 +2455,36 @@
 				if (form.id === 'bom-form') return submitBom(values);
 				if (form.id === 'store-form') return submitStore(values);
 				if (form.id === 'xlsx-map-form') return importXlsxMapped(values);
-				if (form.id === 'prefs-form') { state.prefs = { lang: values.lang === 'en' ? 'en' : 'zh', theme: values.theme === 'dark' ? 'dark' : 'light' }; await savePrefs(); setStatus('success', t('偏好已保存。', 'Preferences saved.')); render(); }
+				if (form.id === 'prefs-form') {
+					const checked = (name) => Object.prototype.hasOwnProperty.call(values, name);
+					state.prefs = normalizePrefs({
+						lang: values.lang,
+						theme: values.theme,
+						features: {
+							showEdaSnapshot: checked('showEdaSnapshot'),
+							enableCurrentPcbImport: checked('enableCurrentPcbImport'),
+							enableProjectBatchImport: checked('enableProjectBatchImport'),
+							enableOpenSourcePcb: checked('enableOpenSourcePcb'),
+							enablePurchaseView: checked('enablePurchaseView'),
+							enableStoresView: checked('enableStoresView'),
+							autoLoadEdaSnapshot: checked('autoLoadEdaSnapshot'),
+						},
+					});
+					if (!hasAnyEdaEntryEnabled()) state.edaSnapshot = null;
+					await savePrefs();
+					if (featureEnabled('autoLoadEdaSnapshot') && hasAnyEdaEntryEnabled() && !state.edaSnapshotLoading) {
+						try {
+							await refreshCurrentEdaSnapshot({ silent: true });
+						} catch (_error) {
+							setStatus('warning', t('偏好已保存，但自动读取工程快照失败，可稍后手动重试。', 'Preferences saved, but auto snapshot loading failed. Retry manually later.'));
+							render();
+							return;
+						}
+					}
+					setStatus('success', t('偏好已保存。', 'Preferences saved.'));
+					render();
+					return;
+				}
 			} catch (error) {
 				setStatus('error', error instanceof Error ? error.message : t('操作失败。', 'Operation failed.'));
 				render();
@@ -2384,4 +2493,7 @@
 	});
 
 	render();
+	if (featureEnabled('autoLoadEdaSnapshot') && hasAnyEdaEntryEnabled()) {
+		void refreshCurrentEdaSnapshot({ silent: true }).catch(() => undefined);
+	}
 })();

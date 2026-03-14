@@ -65,19 +65,34 @@ export async function openBomManager(): Promise<void> {
 	} catch {}
 
 	try {
+		if (typeof iframeApi.showIFrame === 'function') {
+			const restored = await iframeApi.showIFrame(BOM_IFRAME_ID);
+			if (restored) return;
+		}
+	} catch {}
+
+	try {
 		// NOTE: some builds return false even when the window opens. We don't treat false as failure.
-		void (eda as any).sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980);
+		void iframeApi.openIFrame('/iframe/index.abs.html', 1600, 980, BOM_IFRAME_ID, {
+			maximizeButton: true,
+			minimizeButton: true,
+		});
 	} catch (error) {
-		eda.sys_Dialog.showInformationMessage(
-			`打开插件窗口失败。\n\n` +
-				`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
-				`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
-				`版本：${envInfo.editorVersion || '未知'}\n` +
-				`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
-				`错误：${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}\n\n` +
-				`建议：请先使用“环境自检”确认资源可读；若仍失败，建议升级 EDA 后重试。`,
-			BOM_IFRAME_TITLE,
-		);
+		try {
+			void iframeApi.openIFrame('/iframe/index.abs.html', 1600, 980);
+		} catch (fallbackError) {
+			const finalError = fallbackError instanceof Error ? fallbackError : error;
+			eda.sys_Dialog.showInformationMessage(
+				`打开插件窗口失败。\n\n` +
+					`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
+					`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
+					`版本：${envInfo.editorVersion || '未知'}\n` +
+					`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
+					`错误：${finalError instanceof Error ? `${finalError.name}: ${finalError.message}` : String(finalError)}\n\n` +
+					`建议：请先使用“环境自检”确认资源可读；若仍失败，建议升级 EDA 后重试。`,
+				BOM_IFRAME_TITLE,
+			);
+		}
 	}
 
 	// Return immediately so opening stays fast.
