@@ -72,28 +72,49 @@ export async function openBomManager(): Promise<void> {
 		return false;
 	};
 
-	// Keep the open path close to the known-good v1.1.4 behavior:
-	// use the 3-args signature first (best compatibility), then confirm via boot receipt.
-	const tryOpen = async (html: string): Promise<boolean> => {
-		try {
-			const requestTs = Date.now();
+	// Avoid opening multiple windows: only open the default page once.
+	// If it still doesn't render after a while, ask the user before trying the compat page.
+	const requestTs = Date.now();
+	try {
+		await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
+	} catch {}
+
+	let ok = false;
+	try {
+		ok = (await (eda as any).sys_IFrame.openIFrame('/iframe/index.html', 1600, 980)) === true;
+	} catch {}
+	if (ok) return;
+
+	// If openIFrame returned false, give it more time to boot (some clients are slow) without opening another window.
+	// This prevents the "one click opens two windows" issue.
+	setTimeout(() => {
+		void (async () => {
 			try {
-				await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
+				const booted = await waitForIframeBootTs(requestTs, 6000);
+				if (booted) return;
+
+				eda.sys_Dialog.showConfirmationMessage(
+					`插件窗口可能已打开但未能渲染完成。\n\n` +
+						`是否改用兼容页面打开？（可能会再打开一个窗口）\n\n` +
+						`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
+						`版本：${envInfo.editorVersion || '未知'}\n` +
+						`编译日期：${envInfo.compiledDate || '未知'}`,
+					BOM_IFRAME_TITLE,
+					'使用兼容页面',
+					'取消',
+					(mainClicked: boolean) => {
+						if (!mainClicked) return;
+						try {
+							void (eda as any).sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980);
+						} catch {}
+					},
+				);
 			} catch {}
+		})();
+	}, 1);
 
-			const ok = await (eda as any).sys_IFrame.openIFrame(html, 1600, 980);
-			if (ok === true) return true;
-
-			// If returned false, still consider success if the iframe app boots quickly.
-			return await waitForIframeBootTs(requestTs, 2000);
-		} catch {
-			return false;
-		}
-	};
-
-	// Prefer relative-path index first, then absolute variant.
-	if (await tryOpen('/iframe/index.html')) return;
-	if (await tryOpen('/iframe/index.abs.html')) return;
+	// Return immediately so opening stays fast.
+	return;
 
 	eda.sys_Dialog.showInformationMessage(
 		`打开插件窗口失败。\n\n` +
