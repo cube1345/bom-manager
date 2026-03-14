@@ -105,6 +105,12 @@
 		db: loadDb(),
 		componentFilter: { keyword: '', typeId: 'all', warningOnly: false },
 		projectFilter: 'all',
+		purchase: {
+			scope: 'project', // 'project' | 'pcb'
+			projectId: 'all',
+			pcbId: 'all',
+			shortageOnly: true,
+		},
 		editingTypeId: null,
 		editingComponentId: null,
 		editingProjectId: null,
@@ -287,7 +293,7 @@
 		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'BOM Manager'))}</h1><p class="hero-copy">${e(t('在插件窗口中统一维护类型、元器件、采购记录、项目、PCB 与 BOM。', 'Manage types, components, purchase records, projects, PCB and BOM in one place.'))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button></div></header>`;
 	}
 	function nav() {
-		const items = [['dashboard', '概览', 'Overview'], ['components', '元器件', 'Components'], ['types', '类型', 'Types'], ['projects', '项目/PCB', 'Projects/PCB'], ['stores', '店铺', 'Stores'], ['settings', '设置', 'Settings']];
+		const items = [['dashboard', '概览', 'Overview'], ['components', '元器件', 'Components'], ['types', '类型', 'Types'], ['projects', '项目/PCB', 'Projects/PCB'], ['purchase', '采购清单', 'Purchase'], ['stores', '店铺', 'Stores'], ['settings', '设置', 'Settings']];
 		return `<nav class="nav-strip">${items.map(([idValue, zh, en]) => `<button class="nav-link ${state.view === idValue ? 'active' : ''}" data-action="view" data-view="${idValue}">${e(t(zh, en))}</button>`).join('')}</nav>`;
 	}
 	function status() {
@@ -303,6 +309,7 @@
 		if (state.view === 'types') return typesView();
 		if (state.view === 'components') return componentsView();
 		if (state.view === 'projects') return projectsView();
+		if (state.view === 'purchase') return purchaseView();
 		if (state.view === 'stores') return storesView();
 		if (state.view === 'settings') return settingsView();
 		return dashboardView();
@@ -343,6 +350,87 @@
 		const summary = new Map();
 		pcbs.forEach((pcb) => pcb.items.forEach((item) => { if (!summary.has(item.componentId)) summary.set(item.componentId, { total: 0, names: new Set() }); const row = summary.get(item.componentId); row.total += item.quantityPerBoard * pcb.boardQuantity; row.names.add(`${pMap.get(pcb.projectId)?.name || ''}/${pcb.name}`); }));
 		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t('编辑项目', 'Edit Project') : t('新增项目', 'New Project'))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e(currentProject?.id || '')}" /><label><span>${e(t('项目名称', 'Project Name'))}</span><input name="name" required value="${e(currentProject?.name || '')}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentProject?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t('编辑 PCB', 'Edit PCB') : t('新增 PCB', 'New PCB'))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e(currentPcb?.id || '')}" /><label><span>${e(t('所属项目', 'Project'))}</span><select name="projectId" required><option value="">${e(t('请选择项目', 'Select project'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${currentPcb?.projectId === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></label><label><span>${e(t('PCB 名称', 'PCB Name'))}</span><input name="name" required value="${e(currentPcb?.name || '')}" /></label><label><span>${e(t('版本号', 'Version'))}</span><input name="version" value="${e(currentPcb?.version || '')}" /></label><label><span>${e(t('项目用板数量', 'Board Qty'))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e(currentPcb?.boardQuantity || 1)}" /></label><label><span>${e(t('备注', 'Note'))}</span><textarea name="note">${e(currentPcb?.note || '')}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t('更新', 'Update') : t('新增', 'Create'))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t('取消', 'Cancel'))}</button>` : ''}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t('需求统计', 'Requirement Summary'))}</h2><select data-filter="project-filter"><option value="all">${e(t('全部项目', 'All Projects'))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? 'selected' : ''}>${e(item.name)}</option>`).join('')}</select></div><div class="table-wrap"><table><thead><tr><th>${e(t('类型', 'Type'))}</th><th>${e(t('型号', 'Model'))}</th><th>${e(t('总需求', 'Demand'))}</th><th>${e(t('涉及 PCB', 'PCB'))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => (cMap.get(a[0])?.model || '').localeCompare(cMap.get(b[0])?.model || '', locale())).map(([componentId, info]) => `<tr><td>${e(tMap.get(cMap.get(componentId)?.typeId)?.name || t('未知类型', 'Unknown Type'))}</td><td>${e(cMap.get(componentId)?.model || t('未知元器件', 'Unknown Component'))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t('，', ', ')))}</td></tr>`).join('') || `<tr><td colspan="4" class="empty-state">${e(t('暂无统计数据。', 'No summary data.'))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t('项目与 PCB', 'Projects and PCB'))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === 'all' || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t('无项目备注', 'No note'))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t('删除', 'Delete'))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ''}`)}</strong><p>${e(t(`项目数量 ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p></div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t('维护 BOM', 'Manage BOM'))}</button><button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t('编辑', 'Edit'))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t('删除', 'Delete'))}</button></div></div>`).join('') || `<p class="empty-state">${e(t('暂无 PCB。', 'No PCB.'))}</p>`}</div></article>`).join('') || `<p class="empty-state">${e(t('暂无项目数据。', 'No project data.'))}</p>`}</div></section>`;
+	}
+	
+
+	function purchaseView() {
+		const tMap = typeMap();
+		const pMap = projectMap();
+		const cMap = new Map(state.db.components.map((item) => [item.id, item]));
+
+		const scope = state.purchase.scope === 'pcb' ? 'pcb' : 'project';
+		const projectId = state.purchase.projectId || 'all';
+		const pcbId = state.purchase.pcbId || 'all';
+		const shortageOnly = Boolean(state.purchase.shortageOnly);
+
+		const pcbsByProject =
+			projectId === 'all' ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === projectId);
+
+		const pcbsForCalc = (() => {
+			if (scope === 'pcb') {
+				if (pcbId === 'all') return pcbsByProject;
+				return pcbsByProject.filter((item) => item.id === pcbId);
+			}
+			// project scope
+			return pcbsByProject;
+		})();
+
+		const required = new Map();
+		const usedBy = new Map();
+		for (const pcb of pcbsForCalc) {
+			const pcbLabel = `${pMap.get(pcb.projectId)?.name || t('未知项目', 'Unknown Project')}/${pcb.name}${pcb.version ? `(${pcb.version})` : ''}`;
+			for (const item of pcb.items) {
+				const qty = Number(item.quantityPerBoard || 0) * Number(pcb.boardQuantity || 1);
+				if (!required.has(item.componentId)) required.set(item.componentId, 0);
+				required.set(item.componentId, required.get(item.componentId) + qty);
+				if (!usedBy.has(item.componentId)) usedBy.set(item.componentId, new Set());
+				usedBy.get(item.componentId).add(pcbLabel);
+			}
+		}
+
+		const lines = Array.from(required.entries())
+			.map(([componentId, req]) => {
+				const component = cMap.get(componentId) || null;
+				const inStock = component ? Number(component.totalQuantity || 0) : 0;
+				const shortage = Math.max(0, Number(req || 0) - inStock);
+				const unit = component && typeof component.lowestPrice === 'number' ? component.lowestPrice : null;
+				return {
+					componentId,
+					typeName: component ? tMap.get(component.typeId)?.name || t('未知类型', 'Unknown Type') : t('未知类型', 'Unknown Type'),
+					model: component ? component.model : t('未知元器件', 'Unknown Component'),
+					required: Number(req || 0),
+					inStock,
+					shortage,
+					unitPrice: unit,
+					amount: unit === null ? null : unit * shortage,
+					pcbs: Array.from(usedBy.get(componentId) || []),
+				};
+			})
+			.filter((row) => (shortageOnly ? row.shortage > 0 : true))
+			.sort((a, b) => a.model.localeCompare(b.model, locale()));
+
+		const totalRequired = lines.reduce((sum, row) => sum + row.required, 0);
+		const totalShortage = lines.reduce((sum, row) => sum + row.shortage, 0);
+		const totalAmount = lines.reduce((sum, row) => sum + (row.amount || 0), 0);
+
+		const projectOptions = `<option value="all">${e(t('全部项目', 'All Projects'))}</option>` +
+			sort(state.db.projects, (item) => item.name)
+				.map((item) => `<option value="${item.id}" ${projectId === item.id ? 'selected' : ''}>${e(item.name)}</option>`)
+				.join('');
+
+		const pcbOptions = `<option value="all">${e(scope === 'pcb' ? t('全部 PCB（当前项目过滤）', 'All PCBs (project filter)') : t('全部 PCB', 'All PCBs'))}</option>` +
+			sort(pcbsByProject, (item) => `${pMap.get(item.projectId)?.name || ''}${item.name}${item.version}`)
+				.map((item) => {
+					const label = `${pMap.get(item.projectId)?.name || t('未知项目', 'Unknown Project')}/${item.name}${item.version ? ` (${item.version})` : ''}`;
+					return `<option value="${item.id}" ${pcbId === item.id ? 'selected' : ''}>${e(label)}</option>`;
+				})
+				.join('');
+
+		const head = `<section class="panel-card"><div class="section-head"><h2>${e(t('采购清单', 'Purchase List'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="purchase-export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" type="button" data-action="purchase-export-csv">${e(t('导出 CSV', 'Export CSV'))}</button></div></div><div class="card-grid two-col"><div class="stack-form"><label><span>${e(t('范围', 'Scope'))}</span><select data-filter="purchase-scope"><option value="project" ${scope === 'project' ? 'selected' : ''}>${e(t('按项目汇总', 'By Project'))}</option><option value="pcb" ${scope === 'pcb' ? 'selected' : ''}>${e(t('按 PCB', 'By PCB'))}</option></select></label><label><span>${e(t('项目筛选', 'Project Filter'))}</span><select data-filter="purchase-project">${projectOptions}</select></label><label><span>${e(t('PCB 筛选', 'PCB Filter'))}</span><select data-filter="purchase-pcb" ${scope === 'project' ? 'disabled' : ''}>${pcbOptions}</select></label><label class="checkbox-row"><input data-filter="purchase-shortage-only" type="checkbox" ${shortageOnly ? 'checked' : ''} /><span>${e(t('仅显示缺口', 'Shortage only'))}</span></label></div><div class="stack-form"><label><span>${e(t('统计', 'Summary'))}</span><div class="meta-grid"><div><span>${e(t('需求合计', 'Total Required'))}</span><strong>${totalRequired}</strong></div><div><span>${e(t('缺口合计', 'Total Shortage'))}</span><strong>${totalShortage}</strong></div><div><span>${e(t('预计金额', 'Est. Amount'))}</span><strong>${lines.some((r) => r.amount !== null) ? `¥${totalAmount.toFixed(2)}` : '-'}</strong></div></div></label><p class="support-text">${e(t('说明：缺口=需求-库存(小于0按0计)；预计金额使用“最低单价”估算。', 'Note: shortage = required - in-stock (min 0). Estimated amount uses lowest unit price.'))}</p></div></div></section>`;
+
+		const table = `<section class="panel-card"><h2>${e(t('清单明细', 'Line Items'))}</h2><div class="table-wrap"><table><thead><tr><th>${e(t('类型', 'Type'))}</th><th>${e(t('型号', 'Model'))}</th><th>${e(t('需求', 'Required'))}</th><th>${e(t('库存', 'In Stock'))}</th><th>${e(t('缺口', 'Shortage'))}</th><th>${e(t('最低单价', 'Unit'))}</th><th>${e(t('预计金额', 'Amount'))}</th><th>${e(t('涉及 PCB', 'PCBs'))}</th></tr></thead><tbody>${lines.map((row) => `<tr><td>${e(row.typeName)}</td><td>${e(row.model)}</td><td>${row.required}</td><td>${row.inStock}</td><td><strong>${row.shortage}</strong></td><td>${row.unitPrice === null ? '-' : `¥${row.unitPrice.toFixed(2)}`}</td><td>${row.amount === null ? '-' : `¥${row.amount.toFixed(2)}`}</td><td>${e(row.pcbs.join(t('，', ', ')))}</td></tr>`).join('') || `<tr><td colspan="8" class="empty-state">${e(t('当前范围内没有可生成的采购清单。', 'No purchase lines for current scope.'))}</td></tr>`}</tbody></table></div></section>`;
+
+		return head + table;
 	}
 
 	function storesView() {
@@ -1072,6 +1160,125 @@
 		render();
 	}
 
+	function safeFileStem(input) {
+		return String(input || '')
+			.replaceAll(/[\r\n]+/g, ' ')
+			.replaceAll(/[\\/:*?"<>|]+/g, '_')
+			.trim()
+			.slice(0, 80) || 'export';
+	}
+
+	function calcPurchaseExport() {
+		const tMap = typeMap();
+		const pMap = projectMap();
+		const cMap = new Map(state.db.components.map((item) => [item.id, item]));
+
+		const scope = state.purchase.scope === 'pcb' ? 'pcb' : 'project';
+		const projectId = state.purchase.projectId || 'all';
+		const pcbId = state.purchase.pcbId || 'all';
+		const shortageOnly = Boolean(state.purchase.shortageOnly);
+
+		const pcbsByProject = projectId === 'all' ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === projectId);
+		const pcbsForCalc = (() => {
+			if (scope === 'pcb') {
+				if (pcbId === 'all') return pcbsByProject;
+				return pcbsByProject.filter((item) => item.id === pcbId);
+			}
+			return pcbsByProject;
+		})();
+
+		const required = new Map();
+		const usedBy = new Map();
+		for (const pcb of pcbsForCalc) {
+			const pcbLabel = `${pMap.get(pcb.projectId)?.name || t('未知项目', 'Unknown Project')}/${pcb.name}${pcb.version ? `(${pcb.version})` : ''}`;
+			for (const item of pcb.items) {
+				const qty = Number(item.quantityPerBoard || 0) * Number(pcb.boardQuantity || 1);
+				if (!required.has(item.componentId)) required.set(item.componentId, 0);
+				required.set(item.componentId, required.get(item.componentId) + qty);
+				if (!usedBy.has(item.componentId)) usedBy.set(item.componentId, new Set());
+				usedBy.get(item.componentId).add(pcbLabel);
+			}
+		}
+
+		const lines = Array.from(required.entries())
+			.map(([componentId, req]) => {
+				const component = cMap.get(componentId) || null;
+				const inStock = component ? Number(component.totalQuantity || 0) : 0;
+				const shortage = Math.max(0, Number(req || 0) - inStock);
+				const unit = component && typeof component.lowestPrice === 'number' ? component.lowestPrice : null;
+				return {
+					componentId,
+					typeName: component ? tMap.get(component.typeId)?.name || t('未知类型', 'Unknown Type') : t('未知类型', 'Unknown Type'),
+					model: component ? component.model : t('未知元器件', 'Unknown Component'),
+					required: Number(req || 0),
+					inStock,
+					shortage,
+					unitPrice: unit,
+					amount: unit === null ? null : unit * shortage,
+					pcbs: Array.from(usedBy.get(componentId) || []),
+				};
+			})
+			.filter((row) => (shortageOnly ? row.shortage > 0 : true))
+			.sort((a, b) => a.model.localeCompare(b.model, locale()));
+
+		const projectName = projectId === 'all' ? t('全部项目', 'All Projects') : (pMap.get(projectId)?.name || t('未知项目', 'Unknown Project'));
+		const pcbName = (() => {
+			if (scope !== 'pcb') return '';
+			if (pcbId === 'all') return t('全部 PCB', 'All PCBs');
+			const pcb = state.db.pcbs.find((item) => item.id === pcbId);
+			if (!pcb) return t('未知 PCB', 'Unknown PCB');
+			return `${pMap.get(pcb.projectId)?.name || ''}/${pcb.name}${pcb.version ? `(${pcb.version})` : ''}`;
+		})();
+
+		const stem = safeFileStem(`purchase-${scope}-${scope === 'project' ? projectName : pcbName || projectName}`);
+		return {
+			generatedAt: iso(),
+			scope,
+			projectId,
+			pcbId,
+			projectName,
+			pcbName,
+			shortageOnly,
+			lines,
+			fileStem: stem,
+		};
+	}
+
+	async function exportPurchaseJson() {
+		const payload = calcPurchaseExport();
+		await edaApi.sys_FileSystem.saveFile(
+			new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' }),
+			`${payload.fileStem}.json`,
+		);
+		setStatus('success', t('采购清单 JSON 已导出。', 'Purchase list JSON exported.'));
+		render();
+	}
+
+	async function exportPurchaseCsv() {
+		const payload = calcPurchaseExport();
+		const csvCell = (value) => {
+			const s = String(value ?? '');
+			return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+		};
+		const rows = [
+			[t('类型', 'Type'), t('型号', 'Model'), t('需求', 'Required'), t('库存', 'In Stock'), t('缺口', 'Shortage'), t('最低单价', 'Unit'), t('预计金额', 'Amount'), t('涉及 PCB', 'PCBs')],
+			...payload.lines.map((row) => [
+				row.typeName,
+				row.model,
+				row.required,
+				row.inStock,
+				row.shortage,
+				row.unitPrice === null ? '' : row.unitPrice,
+				row.amount === null ? '' : row.amount,
+				row.pcbs.join(' | '),
+			]),
+		];
+		const csv = `\uFEFF${rows.map((r) => r.map(csvCell).join(',')).join('\n')}`;
+		await edaApi.sys_FileSystem.saveFile(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${payload.fileStem}.csv`);
+		setStatus('success', t('采购清单 CSV 已导出。', 'Purchase list CSV exported.'));
+		render();
+	}
+
 	function bomManagerExportSheets() {
 		const tMap = typeMap();
 		const pMap = projectMap();
@@ -1408,6 +1615,15 @@
 		if (target.dataset.filter === 'component-type') { state.componentFilter.typeId = target.value; render(); }
 		if (target.dataset.filter === 'component-warning') { state.componentFilter.warningOnly = target.checked; render(); }
 		if (target.dataset.filter === 'project-filter') { state.projectFilter = target.value; render(); }
+		if (target.dataset.filter === 'purchase-scope') { state.purchase.scope = target.value === 'pcb' ? 'pcb' : 'project'; render(); }
+		if (target.dataset.filter === 'purchase-project') {
+			state.purchase.projectId = target.value || 'all';
+			// Reset PCB filter when project changes to avoid empty result surprises.
+			state.purchase.pcbId = 'all';
+			render();
+		}
+		if (target.dataset.filter === 'purchase-pcb') { state.purchase.pcbId = target.value || 'all'; render(); }
+		if (target.dataset.filter === 'purchase-shortage-only') { state.purchase.shortageOnly = target.checked; render(); }
 		if (target.dataset.xlsxMap === 'sheet' && state.modal && state.modal.type === 'xlsx-map') { state.modal.sheetName = target.value; render(); }
 		if (target.dataset.xlsxMap === 'target' && state.modal && state.modal.type === 'xlsx-map') { state.modal.targetKind = target.value; render(); }
 	});
@@ -1427,6 +1643,8 @@
 				if (action === 'export-json') return exportJson();
 				if (action === 'export-xlsx') return exportXlsx();
 				if (action === 'export-xls') return exportXlsx();
+				if (action === 'purchase-export-json') return exportPurchaseJson();
+				if (action === 'purchase-export-csv') return exportPurchaseCsv();
 				if (action === 'reset') return resetData();
 				if (action === 'cancel-type') { state.editingTypeId = null; render(); return; }
 				if (action === 'edit-type') { state.view = 'types'; state.editingTypeId = target.dataset.id; render(); return; }

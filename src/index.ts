@@ -109,33 +109,38 @@ export async function openBomManager(): Promise<void> {
 		} catch {}
 	};
 
-	// Keep props minimal for compatibility (some 3.2.91 builds seem to 500 on richer props).
-	const props = { title: BOM_IFRAME_TITLE };
+	// Keep the open sequence fast and compatible with older clients:
+	// some builds treat the 4th arg as "props" (not "id"), so we try 3-args first.
+	const props = {
+		title: BOM_IFRAME_TITLE,
+		maximizeButton: true,
+		minimizeButton: true,
+		grayscaleMask: true,
+	};
 
 	const openAny = async (...args: any[]): Promise<boolean> => (eda as any).sys_IFrame.openIFrame(...args);
 
-	const width = 1600;
-	const height = 980;
-	const htmlCandidates = ['/iframe/index.html', 'iframe/index.html', '/iframe/index.abs.html', 'iframe/index.abs.html'];
-
-	// Prefer patterns that include a stable id, so we can close/retry without leaving orphan windows.
-	const patterns: Array<{ label: string; makeArgs: (html: string) => any[] }> = [
-		{ label: '4-args id', makeArgs: (html) => [html, width, height, BOM_IFRAME_ID] },
-		{ label: '5-args id+props', makeArgs: (html) => [html, width, height, BOM_IFRAME_ID, props] },
-		// Fallbacks for possible older signatures:
-		{ label: '4-args props', makeArgs: (html) => [html, width, height, props] },
-		{ label: '3-args', makeArgs: (html) => [html, width, height] },
-	];
-
-	const attempts: Array<{ label: string; run: () => Promise<boolean> }> = [];
-	for (const html of htmlCandidates) {
-		for (const p of patterns) {
-			attempts.push({
-				label: `${p.label} ${html}`,
-				run: async () => openAny(...p.makeArgs(html)),
-			});
+	const addAttempts = (html: string, width: number, height: number) => {
+		const htmlVariants = [html, html.startsWith('/') ? html.slice(1) : `/${html}`];
+		const unique = Array.from(new Set(htmlVariants));
+		const out: Array<{ label: string; run: () => Promise<boolean> }> = [];
+		for (const h of unique) {
+			// 3-args is the most compatible signature across client builds.
+			out.push({ label: `3-args ${h} ${width}x${height}`, run: async () => openAny(h, width, height) });
+			// Some builds accept an id as 4th arg.
+			out.push({ label: `4-args id ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID) });
+			// Some builds accept props as 4th arg (older signature).
+			out.push({ label: `4-args props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, props) });
+			// Newer signature: (html,w,h,id,props)
+			out.push({ label: `5-args id+props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID, props) });
 		}
-	}
+		return out;
+	};
+
+	const attempts: Array<{ label: string; run: () => Promise<boolean> }> = [
+		...addAttempts('/iframe/index.html', 1600, 980),
+		...addAttempts('/iframe/index.abs.html', 1600, 980),
+	];
 
 	const isActuallyOpened = async (): Promise<boolean> => {
 		try {
@@ -153,39 +158,6 @@ export async function openBomManager(): Promise<void> {
 		}
 	};
 
-	const waitForIframeReady = (msTimeout: number) => {
-		let cancel = () => {};
-		const promise = new Promise<boolean>((resolve) => {
-			let settled = false;
-			try {
-				const bus = (eda as any)?.sys_MessageBus;
-				if (!bus || typeof bus.subscribeOnce !== 'function') {
-					resolve(false);
-					return;
-				}
-				const task = bus.subscribeOnce('bom-manager-ready', () => {
-					if (settled) return;
-					settled = true;
-					resolve(true);
-				});
-				cancel = () => {
-					try {
-						task?.cancel?.();
-					} catch {}
-				};
-				setTimeout(() => {
-					if (settled) return;
-					settled = true;
-					cancel();
-					resolve(false);
-				}, msTimeout);
-			} catch {
-				resolve(false);
-			}
-		});
-		return { promise, cancel };
-	};
-
 	const waitForIframeBootTs = async (minTs: number, msTimeout: number) => {
 		const start = Date.now();
 		while (Date.now() - start < msTimeout) {
@@ -196,7 +168,7 @@ export async function openBomManager(): Promise<void> {
 					return true;
 				}
 			} catch {}
-			await new Promise((r) => setTimeout(r, 200));
+			await new Promise((r) => setTimeout(r, 120));
 		}
 		return false;
 	};
@@ -213,19 +185,15 @@ export async function openBomManager(): Promise<void> {
 
 			const ok = await attempt.run();
 
-			// The openIFrame() boolean is not reliable on some client versions.
-			// We consider it "success" only when the iframe app actually boots.
-			const ready = waitForIframeReady(6000);
-			const storageBootedPromise = waitForIframeBootTs(requestTs, 6000);
-			const busBooted = await ready.promise;
-			const storageBooted = await storageBootedPromise;
-			ready.cancel();
-			const booted = busBooted || storageBooted;
+			// openIFrame() boolean is not reliable on some client versions.
+			// For speed, we only wait briefly for the iframe boot receipt.
+			const storageBooted = await waitForIframeBootTs(requestTs, 1200);
+			const booted = Boolean(ok) || storageBooted;
 
 			if (booted) {
 				try {
 					eda.sys_Log?.add?.(
-						`openBomManager ok via ${attempt.label} (ok=${String(ok)} busBooted=${String(busBooted)} storageBooted=${String(storageBooted)})`,
+						`openBomManager ok via ${attempt.label} (ok=${String(ok)} storageBooted=${String(storageBooted)})`,
 						'info' as any,
 					);
 				} catch {}
@@ -243,7 +211,7 @@ export async function openBomManager(): Promise<void> {
 			lastError = new Error(`openIFrame did not boot (${attempt.label}, ok=${String(ok)})`);
 			try {
 				eda.sys_Log?.add?.(
-					`openBomManager failed: iframe did not boot (${attempt.label}, ok=${String(ok)} busBooted=${String(busBooted)} storageBooted=${String(storageBooted)})`,
+					`openBomManager failed: iframe did not boot (${attempt.label}, ok=${String(ok)} storageBooted=${String(storageBooted)})`,
 					'warn' as any,
 				);
 			} catch {}

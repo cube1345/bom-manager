@@ -85,6 +85,13 @@
     db: loadDb(),
     componentFilter: { keyword: "", typeId: "all", warningOnly: false },
     projectFilter: "all",
+    purchase: {
+      scope: "project",
+      // 'project' | 'pcb'
+      projectId: "all",
+      pcbId: "all",
+      shortageOnly: true
+    },
     editingTypeId: null,
     editingComponentId: null,
     editingProjectId: null,
@@ -250,7 +257,7 @@
     return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t("\u7269\u6599\u7BA1\u7406\u52A9\u624B", "BOM Manager"))}</h1><p class="hero-copy">${e(t("\u5728\u63D2\u4EF6\u7A97\u53E3\u4E2D\u7EDF\u4E00\u7EF4\u62A4\u7C7B\u578B\u3001\u5143\u5668\u4EF6\u3001\u91C7\u8D2D\u8BB0\u5F55\u3001\u9879\u76EE\u3001PCB \u4E0E BOM\u3002", "Manage types, components, purchase records, projects, PCB and BOM in one place."))}</p></div><div class="header-actions"><button class="ghost-button" data-action="import">${e(t("\u5BFC\u5165", "Import"))}</button><button class="ghost-button" data-action="export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" data-action="export-xlsx">${e(t("\u5BFC\u51FA Excel(.xlsx)", "Export Excel (.xlsx)"))}</button></div></header>`;
   }
   function nav() {
-    const items = [["dashboard", "\u6982\u89C8", "Overview"], ["components", "\u5143\u5668\u4EF6", "Components"], ["types", "\u7C7B\u578B", "Types"], ["projects", "\u9879\u76EE/PCB", "Projects/PCB"], ["stores", "\u5E97\u94FA", "Stores"], ["settings", "\u8BBE\u7F6E", "Settings"]];
+    const items = [["dashboard", "\u6982\u89C8", "Overview"], ["components", "\u5143\u5668\u4EF6", "Components"], ["types", "\u7C7B\u578B", "Types"], ["projects", "\u9879\u76EE/PCB", "Projects/PCB"], ["purchase", "\u91C7\u8D2D\u6E05\u5355", "Purchase"], ["stores", "\u5E97\u94FA", "Stores"], ["settings", "\u8BBE\u7F6E", "Settings"]];
     return `<nav class="nav-strip">${items.map(([idValue, zh, en]) => `<button class="nav-link ${state.view === idValue ? "active" : ""}" data-action="view" data-view="${idValue}">${e(t(zh, en))}</button>`).join("")}</nav>`;
   }
   function status() {
@@ -264,6 +271,7 @@
     if (state.view === "types") return typesView();
     if (state.view === "components") return componentsView();
     if (state.view === "projects") return projectsView();
+    if (state.view === "purchase") return purchaseView();
     if (state.view === "stores") return storesView();
     if (state.view === "settings") return settingsView();
     return dashboardView();
@@ -336,6 +344,69 @@
       var _a2, _b2, _c;
       return `<tr><td>${e(((_b2 = tMap.get((_a2 = cMap.get(componentId)) == null ? void 0 : _a2.typeId)) == null ? void 0 : _b2.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</td><td>${e(((_c = cMap.get(componentId)) == null ? void 0 : _c.model) || t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t("\uFF0C", ", ")))}</td></tr>`;
     }).join("") || `<tr><td colspan="4" class="empty-state">${e(t("\u6682\u65E0\u7EDF\u8BA1\u6570\u636E\u3002", "No summary data."))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t("\u9879\u76EE\u4E0E PCB", "Projects and PCB"))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === "all" || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t("\u65E0\u9879\u76EE\u5907\u6CE8", "No note"))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ""}`)}</strong><p>${e(t(`\u9879\u76EE\u6570\u91CF ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p></div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t("\u7EF4\u62A4 BOM", "Manage BOM"))}</button><button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></div>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0 PCB\u3002", "No PCB."))}</p>`}</div></article>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0\u9879\u76EE\u6570\u636E\u3002", "No project data."))}</p>`}</div></section>`;
+  }
+  function purchaseView() {
+    var _a2;
+    const tMap = typeMap();
+    const pMap = projectMap();
+    const cMap = new Map(state.db.components.map((item) => [item.id, item]));
+    const scope = state.purchase.scope === "pcb" ? "pcb" : "project";
+    const projectId = state.purchase.projectId || "all";
+    const pcbId = state.purchase.pcbId || "all";
+    const shortageOnly = Boolean(state.purchase.shortageOnly);
+    const pcbsByProject = projectId === "all" ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === projectId);
+    const pcbsForCalc = (() => {
+      if (scope === "pcb") {
+        if (pcbId === "all") return pcbsByProject;
+        return pcbsByProject.filter((item) => item.id === pcbId);
+      }
+      return pcbsByProject;
+    })();
+    const required = /* @__PURE__ */ new Map();
+    const usedBy = /* @__PURE__ */ new Map();
+    for (const pcb of pcbsForCalc) {
+      const pcbLabel = `${((_a2 = pMap.get(pcb.projectId)) == null ? void 0 : _a2.name) || t("\u672A\u77E5\u9879\u76EE", "Unknown Project")}/${pcb.name}${pcb.version ? `(${pcb.version})` : ""}`;
+      for (const item of pcb.items) {
+        const qty = Number(item.quantityPerBoard || 0) * Number(pcb.boardQuantity || 1);
+        if (!required.has(item.componentId)) required.set(item.componentId, 0);
+        required.set(item.componentId, required.get(item.componentId) + qty);
+        if (!usedBy.has(item.componentId)) usedBy.set(item.componentId, /* @__PURE__ */ new Set());
+        usedBy.get(item.componentId).add(pcbLabel);
+      }
+    }
+    const lines = Array.from(required.entries()).map(([componentId, req]) => {
+      var _a3;
+      const component = cMap.get(componentId) || null;
+      const inStock = component ? Number(component.totalQuantity || 0) : 0;
+      const shortage = Math.max(0, Number(req || 0) - inStock);
+      const unit = component && typeof component.lowestPrice === "number" ? component.lowestPrice : null;
+      return {
+        componentId,
+        typeName: component ? ((_a3 = tMap.get(component.typeId)) == null ? void 0 : _a3.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type") : t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"),
+        model: component ? component.model : t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"),
+        required: Number(req || 0),
+        inStock,
+        shortage,
+        unitPrice: unit,
+        amount: unit === null ? null : unit * shortage,
+        pcbs: Array.from(usedBy.get(componentId) || [])
+      };
+    }).filter((row) => shortageOnly ? row.shortage > 0 : true).sort((a, b) => a.model.localeCompare(b.model, locale()));
+    const totalRequired = lines.reduce((sum, row) => sum + row.required, 0);
+    const totalShortage = lines.reduce((sum, row) => sum + row.shortage, 0);
+    const totalAmount = lines.reduce((sum, row) => sum + (row.amount || 0), 0);
+    const projectOptions = `<option value="all">${e(t("\u5168\u90E8\u9879\u76EE", "All Projects"))}</option>` + sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${projectId === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("");
+    const pcbOptions = `<option value="all">${e(scope === "pcb" ? t("\u5168\u90E8 PCB\uFF08\u5F53\u524D\u9879\u76EE\u8FC7\u6EE4\uFF09", "All PCBs (project filter)") : t("\u5168\u90E8 PCB", "All PCBs"))}</option>` + sort(pcbsByProject, (item) => {
+      var _a3;
+      return `${((_a3 = pMap.get(item.projectId)) == null ? void 0 : _a3.name) || ""}${item.name}${item.version}`;
+    }).map((item) => {
+      var _a3;
+      const label = `${((_a3 = pMap.get(item.projectId)) == null ? void 0 : _a3.name) || t("\u672A\u77E5\u9879\u76EE", "Unknown Project")}/${item.name}${item.version ? ` (${item.version})` : ""}`;
+      return `<option value="${item.id}" ${pcbId === item.id ? "selected" : ""}>${e(label)}</option>`;
+    }).join("");
+    const head = `<section class="panel-card"><div class="section-head"><h2>${e(t("\u91C7\u8D2D\u6E05\u5355", "Purchase List"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="purchase-export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" type="button" data-action="purchase-export-csv">${e(t("\u5BFC\u51FA CSV", "Export CSV"))}</button></div></div><div class="card-grid two-col"><div class="stack-form"><label><span>${e(t("\u8303\u56F4", "Scope"))}</span><select data-filter="purchase-scope"><option value="project" ${scope === "project" ? "selected" : ""}>${e(t("\u6309\u9879\u76EE\u6C47\u603B", "By Project"))}</option><option value="pcb" ${scope === "pcb" ? "selected" : ""}>${e(t("\u6309 PCB", "By PCB"))}</option></select></label><label><span>${e(t("\u9879\u76EE\u7B5B\u9009", "Project Filter"))}</span><select data-filter="purchase-project">${projectOptions}</select></label><label><span>${e(t("PCB \u7B5B\u9009", "PCB Filter"))}</span><select data-filter="purchase-pcb" ${scope === "project" ? "disabled" : ""}>${pcbOptions}</select></label><label class="checkbox-row"><input data-filter="purchase-shortage-only" type="checkbox" ${shortageOnly ? "checked" : ""} /><span>${e(t("\u4EC5\u663E\u793A\u7F3A\u53E3", "Shortage only"))}</span></label></div><div class="stack-form"><label><span>${e(t("\u7EDF\u8BA1", "Summary"))}</span><div class="meta-grid"><div><span>${e(t("\u9700\u6C42\u5408\u8BA1", "Total Required"))}</span><strong>${totalRequired}</strong></div><div><span>${e(t("\u7F3A\u53E3\u5408\u8BA1", "Total Shortage"))}</span><strong>${totalShortage}</strong></div><div><span>${e(t("\u9884\u8BA1\u91D1\u989D", "Est. Amount"))}</span><strong>${lines.some((r) => r.amount !== null) ? `\xA5${totalAmount.toFixed(2)}` : "-"}</strong></div></div></label><p class="support-text">${e(t("\u8BF4\u660E\uFF1A\u7F3A\u53E3=\u9700\u6C42-\u5E93\u5B58(\u5C0F\u4E8E0\u63090\u8BA1)\uFF1B\u9884\u8BA1\u91D1\u989D\u4F7F\u7528\u201C\u6700\u4F4E\u5355\u4EF7\u201D\u4F30\u7B97\u3002", "Note: shortage = required - in-stock (min 0). Estimated amount uses lowest unit price."))}</p></div></div></section>`;
+    const table = `<section class="panel-card"><h2>${e(t("\u6E05\u5355\u660E\u7EC6", "Line Items"))}</h2><div class="table-wrap"><table><thead><tr><th>${e(t("\u7C7B\u578B", "Type"))}</th><th>${e(t("\u578B\u53F7", "Model"))}</th><th>${e(t("\u9700\u6C42", "Required"))}</th><th>${e(t("\u5E93\u5B58", "In Stock"))}</th><th>${e(t("\u7F3A\u53E3", "Shortage"))}</th><th>${e(t("\u6700\u4F4E\u5355\u4EF7", "Unit"))}</th><th>${e(t("\u9884\u8BA1\u91D1\u989D", "Amount"))}</th><th>${e(t("\u6D89\u53CA PCB", "PCBs"))}</th></tr></thead><tbody>${lines.map((row) => `<tr><td>${e(row.typeName)}</td><td>${e(row.model)}</td><td>${row.required}</td><td>${row.inStock}</td><td><strong>${row.shortage}</strong></td><td>${row.unitPrice === null ? "-" : `\xA5${row.unitPrice.toFixed(2)}`}</td><td>${row.amount === null ? "-" : `\xA5${row.amount.toFixed(2)}`}</td><td>${e(row.pcbs.join(t("\uFF0C", ", ")))}</td></tr>`).join("") || `<tr><td colspan="8" class="empty-state">${e(t("\u5F53\u524D\u8303\u56F4\u5185\u6CA1\u6709\u53EF\u751F\u6210\u7684\u91C7\u8D2D\u6E05\u5355\u3002", "No purchase lines for current scope."))}</td></tr>`}</tbody></table></div></section>`;
+    return head + table;
   }
   function storesView() {
     const current = active("stores", state.editingStoreId);
@@ -1006,6 +1077,111 @@
     setStatus("success", t("JSON \u5DF2\u5BFC\u51FA\u3002", "JSON exported."));
     render();
   }
+  function safeFileStem(input) {
+    return String(input || "").replaceAll(/[\r\n]+/g, " ").replaceAll(/[\\/:*?"<>|]+/g, "_").trim().slice(0, 80) || "export";
+  }
+  function calcPurchaseExport() {
+    var _a2, _b2;
+    const tMap = typeMap();
+    const pMap = projectMap();
+    const cMap = new Map(state.db.components.map((item) => [item.id, item]));
+    const scope = state.purchase.scope === "pcb" ? "pcb" : "project";
+    const projectId = state.purchase.projectId || "all";
+    const pcbId = state.purchase.pcbId || "all";
+    const shortageOnly = Boolean(state.purchase.shortageOnly);
+    const pcbsByProject = projectId === "all" ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === projectId);
+    const pcbsForCalc = (() => {
+      if (scope === "pcb") {
+        if (pcbId === "all") return pcbsByProject;
+        return pcbsByProject.filter((item) => item.id === pcbId);
+      }
+      return pcbsByProject;
+    })();
+    const required = /* @__PURE__ */ new Map();
+    const usedBy = /* @__PURE__ */ new Map();
+    for (const pcb of pcbsForCalc) {
+      const pcbLabel = `${((_a2 = pMap.get(pcb.projectId)) == null ? void 0 : _a2.name) || t("\u672A\u77E5\u9879\u76EE", "Unknown Project")}/${pcb.name}${pcb.version ? `(${pcb.version})` : ""}`;
+      for (const item of pcb.items) {
+        const qty = Number(item.quantityPerBoard || 0) * Number(pcb.boardQuantity || 1);
+        if (!required.has(item.componentId)) required.set(item.componentId, 0);
+        required.set(item.componentId, required.get(item.componentId) + qty);
+        if (!usedBy.has(item.componentId)) usedBy.set(item.componentId, /* @__PURE__ */ new Set());
+        usedBy.get(item.componentId).add(pcbLabel);
+      }
+    }
+    const lines = Array.from(required.entries()).map(([componentId, req]) => {
+      var _a3;
+      const component = cMap.get(componentId) || null;
+      const inStock = component ? Number(component.totalQuantity || 0) : 0;
+      const shortage = Math.max(0, Number(req || 0) - inStock);
+      const unit = component && typeof component.lowestPrice === "number" ? component.lowestPrice : null;
+      return {
+        componentId,
+        typeName: component ? ((_a3 = tMap.get(component.typeId)) == null ? void 0 : _a3.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type") : t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"),
+        model: component ? component.model : t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"),
+        required: Number(req || 0),
+        inStock,
+        shortage,
+        unitPrice: unit,
+        amount: unit === null ? null : unit * shortage,
+        pcbs: Array.from(usedBy.get(componentId) || [])
+      };
+    }).filter((row) => shortageOnly ? row.shortage > 0 : true).sort((a, b) => a.model.localeCompare(b.model, locale()));
+    const projectName = projectId === "all" ? t("\u5168\u90E8\u9879\u76EE", "All Projects") : ((_b2 = pMap.get(projectId)) == null ? void 0 : _b2.name) || t("\u672A\u77E5\u9879\u76EE", "Unknown Project");
+    const pcbName = (() => {
+      var _a3;
+      if (scope !== "pcb") return "";
+      if (pcbId === "all") return t("\u5168\u90E8 PCB", "All PCBs");
+      const pcb = state.db.pcbs.find((item) => item.id === pcbId);
+      if (!pcb) return t("\u672A\u77E5 PCB", "Unknown PCB");
+      return `${((_a3 = pMap.get(pcb.projectId)) == null ? void 0 : _a3.name) || ""}/${pcb.name}${pcb.version ? `(${pcb.version})` : ""}`;
+    })();
+    const stem = safeFileStem(`purchase-${scope}-${scope === "project" ? projectName : pcbName || projectName}`);
+    return {
+      generatedAt: iso(),
+      scope,
+      projectId,
+      pcbId,
+      projectName,
+      pcbName,
+      shortageOnly,
+      lines,
+      fileStem: stem
+    };
+  }
+  async function exportPurchaseJson() {
+    const payload = calcPurchaseExport();
+    await edaApi.sys_FileSystem.saveFile(
+      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }),
+      `${payload.fileStem}.json`
+    );
+    setStatus("success", t("\u91C7\u8D2D\u6E05\u5355 JSON \u5DF2\u5BFC\u51FA\u3002", "Purchase list JSON exported."));
+    render();
+  }
+  async function exportPurchaseCsv() {
+    const payload = calcPurchaseExport();
+    const csvCell = (value) => {
+      const s = String(value != null ? value : "");
+      return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+    };
+    const rows = [
+      [t("\u7C7B\u578B", "Type"), t("\u578B\u53F7", "Model"), t("\u9700\u6C42", "Required"), t("\u5E93\u5B58", "In Stock"), t("\u7F3A\u53E3", "Shortage"), t("\u6700\u4F4E\u5355\u4EF7", "Unit"), t("\u9884\u8BA1\u91D1\u989D", "Amount"), t("\u6D89\u53CA PCB", "PCBs")],
+      ...payload.lines.map((row) => [
+        row.typeName,
+        row.model,
+        row.required,
+        row.inStock,
+        row.shortage,
+        row.unitPrice === null ? "" : row.unitPrice,
+        row.amount === null ? "" : row.amount,
+        row.pcbs.join(" | ")
+      ])
+    ];
+    const csv = `\uFEFF${rows.map((r) => r.map(csvCell).join(",")).join("\n")}`;
+    await edaApi.sys_FileSystem.saveFile(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${payload.fileStem}.csv`);
+    setStatus("success", t("\u91C7\u8D2D\u6E05\u5355 CSV \u5DF2\u5BFC\u51FA\u3002", "Purchase list CSV exported."));
+    render();
+  }
   function bomManagerExportSheets() {
     const tMap = typeMap();
     const pMap = projectMap();
@@ -1349,6 +1525,23 @@
       state.projectFilter = target.value;
       render();
     }
+    if (target.dataset.filter === "purchase-scope") {
+      state.purchase.scope = target.value === "pcb" ? "pcb" : "project";
+      render();
+    }
+    if (target.dataset.filter === "purchase-project") {
+      state.purchase.projectId = target.value || "all";
+      state.purchase.pcbId = "all";
+      render();
+    }
+    if (target.dataset.filter === "purchase-pcb") {
+      state.purchase.pcbId = target.value || "all";
+      render();
+    }
+    if (target.dataset.filter === "purchase-shortage-only") {
+      state.purchase.shortageOnly = target.checked;
+      render();
+    }
     if (target.dataset.xlsxMap === "sheet" && state.modal && state.modal.type === "xlsx-map") {
       state.modal.sheetName = target.value;
       render();
@@ -1378,6 +1571,8 @@
         if (action === "export-json") return exportJson();
         if (action === "export-xlsx") return exportXlsx();
         if (action === "export-xls") return exportXlsx();
+        if (action === "purchase-export-json") return exportPurchaseJson();
+        if (action === "purchase-export-csv") return exportPurchaseCsv();
         if (action === "reset") return resetData();
         if (action === "cancel-type") {
           state.editingTypeId = null;
