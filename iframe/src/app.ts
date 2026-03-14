@@ -10,11 +10,35 @@
 	const edaApi = window.eda || (window.parent && window.parent.eda) || (window.top && window.top.eda);
 	const DB_KEY = 'bom-manager-db';
 	const PREFS_KEY = 'bom-manager-prefs';
+	const WINDOW_STATE_KEY = 'bom-manager-window-state';
+	const WINDOW_SIZE_HINT_KEY = 'bom-manager-window-size-hint';
 
 	if (!app) return;
 	if (!edaApi) {
 		app.innerHTML = '<div class="fatal-state">未检测到嘉立创插件运行环境（IFrame 内未注入 eda API）。</div>';
 		return;
+	}
+
+	let persistWindowHintTimer = 0;
+
+	function currentWindowSizeHint() {
+		const screenWidth = Number(window?.screen?.availWidth || window?.screen?.width || window.innerWidth || 0);
+		const screenHeight = Number(window?.screen?.availHeight || window?.screen?.height || window.innerHeight || 0);
+		return {
+			width: Math.max(1280, Math.round(screenWidth - 72)),
+			height: Math.max(760, Math.round(screenHeight - 120)),
+			viewportWidth: Math.max(0, Math.round(window.innerWidth || 0)),
+			viewportHeight: Math.max(0, Math.round(window.innerHeight || 0)),
+			measuredAt: new Date().toISOString(),
+		};
+	}
+
+	function persistWindowSizeHint() {
+		try {
+			if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
+				void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_SIZE_HINT_KEY, currentWindowSizeHint());
+			}
+		} catch (_e) {}
 	}
 
 	try {
@@ -79,9 +103,13 @@
 				href: String(location?.href || ''),
 				baseURI: String(document?.baseURI || ''),
 				userAgent: String(navigator?.userAgent || ''),
+				viewportWidth: Math.max(0, Math.round(window.innerWidth || 0)),
+				viewportHeight: Math.max(0, Math.round(window.innerHeight || 0)),
 			};
 			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot-ts', now);
 			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot', bootInfo);
+			void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, 'normal');
+			persistWindowSizeHint();
 		}
 
 		if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === 'function') {
@@ -96,6 +124,21 @@
 			);
 		} catch (_e) {}
 	} catch (_error) {}
+
+	window.addEventListener('resize', () => {
+		if (persistWindowHintTimer) window.clearTimeout(persistWindowHintTimer);
+		persistWindowHintTimer = window.setTimeout(() => {
+			persistWindowSizeHint();
+		}, 180);
+	});
+
+	window.addEventListener('pagehide', () => {
+		try {
+			if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
+				void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, 'closed');
+			}
+		} catch (_e) {}
+	});
 
 	const state = {
 		view: 'dashboard',

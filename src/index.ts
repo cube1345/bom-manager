@@ -14,9 +14,57 @@ import * as extensionConfig from '../extension.json';
 
 const BOM_IFRAME_ID = 'bom-manager-main';
 const BOM_IFRAME_TITLE = '物料管理助手';
+const BOM_IFRAME_STATE_KEY = 'bom-manager-window-state';
+const BOM_IFRAME_SIZE_HINT_KEY = 'bom-manager-window-size-hint';
+const BOM_IFRAME_DEFAULT_SIZE = { width: 1920, height: 1200 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function activate(status?: 'onStartupFinished', arg?: string): void {}
+
+function normalizeWindowState(value: unknown): 'normal' | 'maximized' | 'minimized' | 'closed' {
+	return value === 'normal' || value === 'maximized' || value === 'minimized' || value === 'closed' ? value : 'closed';
+}
+
+function normalizeWindowSize(input: unknown): { width: number; height: number } {
+	const raw = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+	const width = Number(raw.width);
+	const height = Number(raw.height);
+	return {
+		width: Number.isFinite(width) && width >= 1200 ? Math.round(width) : BOM_IFRAME_DEFAULT_SIZE.width,
+		height: Number.isFinite(height) && height >= 760 ? Math.round(height) : BOM_IFRAME_DEFAULT_SIZE.height,
+	};
+}
+
+function getRuntimeWindowSizeHint(): { width: number; height: number } | null {
+	try {
+		const runtimeScreen = (globalThis as any)?.screen;
+		const screenWidth = Number(runtimeScreen?.availWidth || runtimeScreen?.width || 0);
+		const screenHeight = Number(runtimeScreen?.availHeight || runtimeScreen?.height || 0);
+		if (!Number.isFinite(screenWidth) || !Number.isFinite(screenHeight) || screenWidth <= 0 || screenHeight <= 0) return null;
+		return {
+			width: Math.max(1280, Math.round(screenWidth - 72)),
+			height: Math.max(760, Math.round(screenHeight - 120)),
+		};
+	} catch {
+		return null;
+	}
+}
+
+function getPreferredWindowSize(storageApi: any): { width: number; height: number } {
+	const runtimeHint = getRuntimeWindowSizeHint();
+	if (runtimeHint) return runtimeHint;
+	try {
+		return normalizeWindowSize(storageApi?.getExtensionUserConfig?.(BOM_IFRAME_SIZE_HINT_KEY));
+	} catch {
+		return BOM_IFRAME_DEFAULT_SIZE;
+	}
+}
+
+async function writeWindowState(storageApi: any, state: 'normal' | 'maximized' | 'minimized' | 'closed'): Promise<void> {
+	try {
+		await storageApi?.setExtensionUserConfig?.(BOM_IFRAME_STATE_KEY, state);
+	} catch {}
+}
 
 export async function openBomManager(): Promise<void> {
 	const envInfo = (() => {
@@ -45,6 +93,7 @@ export async function openBomManager(): Promise<void> {
 	})();
 
 	const iframeApi = (eda as any)?.sys_IFrame;
+	const storageApi = (eda as any)?.sys_Storage;
 	if (!iframeApi || typeof iframeApi.openIFrame !== 'function') {
 		eda.sys_Dialog.showInformationMessage(
 			`当前 EDA 版本可能不支持 IFrame 插件窗口，无法打开。\n\n` +
@@ -60,27 +109,40 @@ export async function openBomManager(): Promise<void> {
 	// Your client (3.2.91) can open the compat page reliably, while the default page may fail to render.
 	// So we only open the compat page by default to avoid duplicate windows and blank renders.
 	const requestTs = Date.now();
+	const windowState = normalizeWindowState(storageApi?.getExtensionUserConfig?.(BOM_IFRAME_STATE_KEY));
+	const preferredSize = getPreferredWindowSize(storageApi);
 	try {
-		await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
+		await storageApi?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
 	} catch {}
 
 	try {
-		if (typeof iframeApi.showIFrame === 'function') {
+		if (windowState !== 'minimized' && typeof iframeApi.showIFrame === 'function') {
 			const restored = await iframeApi.showIFrame(BOM_IFRAME_ID);
 			if (restored) return;
 		}
 	} catch {}
 
 	try {
+		if (typeof iframeApi.closeIFrame === 'function') {
+			await iframeApi.closeIFrame(BOM_IFRAME_ID).catch(() => false);
+		}
+
 		// NOTE: some builds return false even when the window opens. We don't treat false as failure.
-		void iframeApi.openIFrame('/iframe/index.abs.html', 1600, 980, BOM_IFRAME_ID, {
+		void iframeApi.openIFrame('/iframe/index.abs.html', preferredSize.width, preferredSize.height, BOM_IFRAME_ID, {
 			maximizeButton: true,
 			minimizeButton: true,
+			buttonCallbackFn: (button) => {
+				const nextState = button === 'minimize' ? 'minimized' : button === 'maximize' ? 'maximized' : 'closed';
+				void writeWindowState(storageApi, nextState);
+			},
 		});
+		void writeWindowState(storageApi, 'normal');
 	} catch (error) {
 		try {
-			void iframeApi.openIFrame('/iframe/index.abs.html', 1600, 980);
+			void iframeApi.openIFrame('/iframe/index.abs.html', preferredSize.width, preferredSize.height);
+			void writeWindowState(storageApi, 'normal');
 		} catch (fallbackError) {
+			void writeWindowState(storageApi, 'closed');
 			const finalError = fallbackError instanceof Error ? fallbackError : error;
 			eda.sys_Dialog.showInformationMessage(
 				`打开插件窗口失败。\n\n` +

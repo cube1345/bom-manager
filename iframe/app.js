@@ -5,10 +5,33 @@
   const edaApi = window.eda || window.parent && window.parent.eda || window.top && window.top.eda;
   const DB_KEY = "bom-manager-db";
   const PREFS_KEY = "bom-manager-prefs";
+  const WINDOW_STATE_KEY = "bom-manager-window-state";
+  const WINDOW_SIZE_HINT_KEY = "bom-manager-window-size-hint";
   if (!app) return;
   if (!edaApi) {
     app.innerHTML = '<div class="fatal-state">\u672A\u68C0\u6D4B\u5230\u5609\u7ACB\u521B\u63D2\u4EF6\u8FD0\u884C\u73AF\u5883\uFF08IFrame \u5185\u672A\u6CE8\u5165 eda API\uFF09\u3002</div>';
     return;
+  }
+  let persistWindowHintTimer = 0;
+  function currentWindowSizeHint() {
+    var _a2, _b2, _c, _d;
+    const screenWidth = Number(((_a2 = window == null ? void 0 : window.screen) == null ? void 0 : _a2.availWidth) || ((_b2 = window == null ? void 0 : window.screen) == null ? void 0 : _b2.width) || window.innerWidth || 0);
+    const screenHeight = Number(((_c = window == null ? void 0 : window.screen) == null ? void 0 : _c.availHeight) || ((_d = window == null ? void 0 : window.screen) == null ? void 0 : _d.height) || window.innerHeight || 0);
+    return {
+      width: Math.max(1280, Math.round(screenWidth - 72)),
+      height: Math.max(760, Math.round(screenHeight - 120)),
+      viewportWidth: Math.max(0, Math.round(window.innerWidth || 0)),
+      viewportHeight: Math.max(0, Math.round(window.innerHeight || 0)),
+      measuredAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  function persistWindowSizeHint() {
+    try {
+      if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === "function") {
+        void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_SIZE_HINT_KEY, currentWindowSizeHint());
+      }
+    } catch (_e) {
+    }
   }
   try {
     const now = Date.now();
@@ -59,10 +82,14 @@
         ts: now,
         href: String((location == null ? void 0 : location.href) || ""),
         baseURI: String((document == null ? void 0 : document.baseURI) || ""),
-        userAgent: String((navigator == null ? void 0 : navigator.userAgent) || "")
+        userAgent: String((navigator == null ? void 0 : navigator.userAgent) || ""),
+        viewportWidth: Math.max(0, Math.round(window.innerWidth || 0)),
+        viewportHeight: Math.max(0, Math.round(window.innerHeight || 0))
       };
       void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot-ts", now);
       void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot", bootInfo);
+      void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, "normal");
+      persistWindowSizeHint();
     }
     if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === "function") {
       edaApi.sys_MessageBus.publish("bom-manager-ready", { ts: now });
@@ -77,6 +104,20 @@
     }
   } catch (_error) {
   }
+  window.addEventListener("resize", () => {
+    if (persistWindowHintTimer) window.clearTimeout(persistWindowHintTimer);
+    persistWindowHintTimer = window.setTimeout(() => {
+      persistWindowSizeHint();
+    }, 180);
+  });
+  window.addEventListener("pagehide", () => {
+    try {
+      if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === "function") {
+        void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, "closed");
+      }
+    } catch (_e) {
+    }
+  });
   const state = {
     view: "dashboard",
     status: "",
