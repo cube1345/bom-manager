@@ -95,6 +95,14 @@ npm run build
 - `.xls`（旧格式二进制）导入尚未实现。
 - 插件存储容量受宿主限制，建议大型数据集使用“导出 JSON”做定期归档。
 
+## 排错
+
+- 若打开窗口后出现类似 404 或页面空白，通常是宿主版本对 `openIFrame()` 以及 IFrame 资源路径解析存在兼容性问题。建议优先升级到更新的嘉立创 EDA 专业版。
+- IFrame 页面提供两种加载方式：
+  - `iframe/index.html` 使用相对路径加载 `./app.js`、`./styles.css`（更适合离线环境）。
+  - `iframe/index.abs.html` 使用绝对路径 `/iframe/app.js`、`/iframe/styles.css`（用于兼容部分旧版本）。
+  插件入口会自动按顺序尝试两种页面，无需联网。
+
 ## 开源许可
 
 本项目使用 Apache License 2.0。

@@ -13,6 +13,7 @@
 import * as extensionConfig from '../extension.json';
 
 const BOM_IFRAME_ID = 'bom-manager-main';
+const BOM_IFRAME_TITLE = '物料管理助手';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function activate(status?: 'onStartupFinished', arg?: string): void {}
@@ -63,21 +64,34 @@ export async function openBomManager(): Promise<void> {
 				return {
 					indexSlash: undefined as boolean | undefined,
 					indexNoSlash: undefined as boolean | undefined,
+					indexAbsSlash: undefined as boolean | undefined,
+					indexAbsNoSlash: undefined as boolean | undefined,
 					appJs: undefined as boolean | undefined,
 					styles: undefined as boolean | undefined,
 				};
 			}
-			const [a, b, js, css] = await Promise.all([
+			const [a, b, a2, b2, js, css] = await Promise.all([
 				fsApi.getExtensionFile('/iframe/index.html').catch(() => undefined),
 				fsApi.getExtensionFile('iframe/index.html').catch(() => undefined),
+				fsApi.getExtensionFile('/iframe/index.abs.html').catch(() => undefined),
+				fsApi.getExtensionFile('iframe/index.abs.html').catch(() => undefined),
 				fsApi.getExtensionFile('/iframe/app.js').catch(() => undefined),
 				fsApi.getExtensionFile('/iframe/styles.css').catch(() => undefined),
 			]);
-			return { indexSlash: Boolean(a), indexNoSlash: Boolean(b), appJs: Boolean(js), styles: Boolean(css) };
+			return {
+				indexSlash: Boolean(a),
+				indexNoSlash: Boolean(b),
+				indexAbsSlash: Boolean(a2),
+				indexAbsNoSlash: Boolean(b2),
+				appJs: Boolean(js),
+				styles: Boolean(css),
+			};
 		} catch {
 			return {
 				indexSlash: undefined as boolean | undefined,
 				indexNoSlash: undefined as boolean | undefined,
+				indexAbsSlash: undefined as boolean | undefined,
+				indexAbsNoSlash: undefined as boolean | undefined,
 				appJs: undefined as boolean | undefined,
 				styles: undefined as boolean | undefined,
 			};
@@ -94,35 +108,49 @@ export async function openBomManager(): Promise<void> {
 
 	const attempts: Array<{ label: string; run: () => Promise<boolean> }> = [
 		{
-			label: 'large/props',
-			run: async () =>
-				eda.sys_IFrame.openIFrame('/iframe/index.html', 1600, 980, BOM_IFRAME_ID, {
-					maximizeButton: true,
-					minimizeButton: true,
-					grayscaleMask: true,
-				}),
-		},
-		{
-			label: 'large/no-props',
+			label: 'large/no-props (index.rel)',
 			run: async () => eda.sys_IFrame.openIFrame('/iframe/index.html', 1600, 980, BOM_IFRAME_ID),
 		},
 		{
-			label: 'mid/props',
+			label: 'large/no-props (index.abs)',
+			run: async () => eda.sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980, BOM_IFRAME_ID),
+		},
+		{
+			label: 'large/props (index.rel)',
 			run: async () =>
-				eda.sys_IFrame.openIFrame('/iframe/index.html', 1200, 820, BOM_IFRAME_ID, {
+				eda.sys_IFrame.openIFrame('/iframe/index.html', 1600, 980, BOM_IFRAME_ID, {
+					title: BOM_IFRAME_TITLE,
 					maximizeButton: true,
 					minimizeButton: true,
 					grayscaleMask: true,
 				}),
 		},
 		{
-			label: 'doc-example-500',
+			label: 'large/props (index.abs)',
+			run: async () =>
+				eda.sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980, BOM_IFRAME_ID, {
+					title: BOM_IFRAME_TITLE,
+					maximizeButton: true,
+					minimizeButton: true,
+					grayscaleMask: true,
+				}),
+		},
+		{
+			label: 'mid/no-props (index.rel)',
+			run: async () =>
+				eda.sys_IFrame.openIFrame('/iframe/index.html', 1200, 820, BOM_IFRAME_ID),
+		},
+		{
+			label: 'doc-example-500 (index.rel)',
 			run: async () => eda.sys_IFrame.openIFrame('/iframe/index.html', 500, 500, BOM_IFRAME_ID),
 		},
 	];
 
 	const isActuallyOpened = async (): Promise<boolean> => {
 		try {
+			if (typeof (eda as any)?.sys_IFrame?.hideIFrame !== 'function' || typeof (eda as any)?.sys_IFrame?.showIFrame !== 'function') {
+				return false;
+			}
 			const hidden = await eda.sys_IFrame.hideIFrame(BOM_IFRAME_ID);
 			if (!hidden) {
 				return false;
@@ -184,42 +212,62 @@ export async function openBomManager(): Promise<void> {
 
 	let lastError: unknown = null;
 	for (const attempt of attempts) {
+		let requestTs = 0;
 		try {
 			await closeIfExists();
-			const requestTs = Date.now();
+			requestTs = Date.now();
 			try {
 				await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
 			} catch {}
 
-			const ready = waitForIframeReady(2500);
 			const ok = await attempt.run();
-			const opened = ok || (ok === false && (await isActuallyOpened()));
-			const busBooted = opened ? true : await ready.promise;
-			const storageBooted = opened ? true : await waitForIframeBootTs(requestTs, 3000);
-			ready.cancel();
 
-			if (opened || busBooted || storageBooted) {
+			// The openIFrame() boolean is not reliable on some client versions.
+			// We consider it "success" only when the iframe app actually boots.
+			const ready = waitForIframeReady(3500);
+			const storageBootedPromise = waitForIframeBootTs(requestTs, 3500);
+			const busBooted = await ready.promise;
+			const storageBooted = await storageBootedPromise;
+			ready.cancel();
+			const booted = busBooted || storageBooted;
+
+			if (booted) {
 				try {
 					eda.sys_Log?.add?.(
-						`openBomManager ok via ${attempt.label} (ok=${String(ok)} opened=${String(opened)} busBooted=${String(busBooted)} storageBooted=${String(storageBooted)})`,
+						`openBomManager ok via ${attempt.label} (ok=${String(ok)} busBooted=${String(busBooted)} storageBooted=${String(storageBooted)})`,
 						'info' as any,
 					);
 				} catch {}
 				return;
 			}
-			lastError = new Error(`openIFrame returned false (${attempt.label})`);
+
+			// If the window was created but the app didn't boot (e.g. 404 / script load failure),
+			// close it to avoid leaving a blank window before the next attempt.
 			try {
-				eda.sys_Log?.add?.(`openBomManager failed: openIFrame returned false (${attempt.label})`, 'warn' as any);
+				if (await isActuallyOpened()) {
+					await closeIfExists();
+				}
+			} catch {}
+
+			lastError = new Error(`openIFrame did not boot (${attempt.label}, ok=${String(ok)})`);
+			try {
+				eda.sys_Log?.add?.(
+					`openBomManager failed: iframe did not boot (${attempt.label}, ok=${String(ok)} busBooted=${String(busBooted)} storageBooted=${String(storageBooted)})`,
+					'warn' as any,
+				);
 			} catch {}
 		} catch (error) {
 			lastError = error;
 			// If an exception is thrown, still check whether the window got created.
-			if (await isActuallyOpened()) {
-				try {
-					eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (threw but opened)`, 'warn' as any);
-				} catch {}
-				return;
-			}
+			try {
+				// Even if openIFrame threw, still consider it success only if the iframe app booted.
+				if (requestTs > 0 && (await waitForIframeBootTs(requestTs, 1200))) {
+					try {
+						eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (threw but booted)`, 'warn' as any);
+					} catch {}
+					return;
+				}
+			} catch {}
 			try {
 				eda.sys_Log?.add?.(
 					`openBomManager failed (${attempt.label}): ${
@@ -232,16 +280,17 @@ export async function openBomManager(): Promise<void> {
 	}
 
 	eda.sys_Dialog.showInformationMessage(
-		`打开插件窗口失败（openIFrame 始终返回 false）。\n\n` +
+		`打开插件窗口失败（IFrame 应用未能完成启动）。\n\n` +
 			`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
 			`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
 			`版本：${envInfo.editorVersion || '未知'}\n` +
 			`编译日期：${envInfo.compiledDate || '未知'}\n` +
-			`扩展资源：index(/)=${String(fileExists.indexSlash)} index(no/)=${String(fileExists.indexNoSlash)}\n\n` +
+			`扩展资源：index(rel /)=${String(fileExists.indexSlash)} index(rel no/)=${String(fileExists.indexNoSlash)} index(abs /)=${String(fileExists.indexAbsSlash)} index(abs no/)=${String(fileExists.indexAbsNoSlash)}\n` +
+			`扩展资源：app.js=${String(fileExists.appJs)} styles.css=${String(fileExists.styles)}\n\n` +
 			`最后错误：${lastError instanceof Error ? lastError.message : String(lastError)}\n\n` +
 			`说明：本插件本质不需要联网。当前失败更像是 EDA 版本对 openIFrame 的限制/缺陷。\n` +
 			`建议：升级到更新版本的嘉立创 EDA 专业版后重试；或将这段信息发给我继续排查。`,
-		'物料管理助手',
+		BOM_IFRAME_TITLE,
 	);
 }
 
