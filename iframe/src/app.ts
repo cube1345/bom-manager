@@ -117,6 +117,8 @@
 		editingPcbId: null,
 		editingStoreId: null,
 		modal: null,
+		edaSnapshot: null,
+		edaSnapshotLoading: false,
 	};
 
 	function id() {
@@ -274,6 +276,70 @@
 		await edaApi.sys_Storage.setExtensionUserConfig(DB_KEY, state.db);
 	}
 
+	function projectDisplayNameFromSnapshot(snapshot) {
+		return String(snapshot?.projectFriendlyName || snapshot?.projectName || '').trim();
+	}
+	function pcbDisplayNameFromSnapshot(snapshot) {
+		return String(snapshot?.pcbName || snapshot?.boardName || snapshot?.parentBoardName || '').trim();
+	}
+	function boardDisplayNameFromSnapshot(snapshot) {
+		return String(snapshot?.boardName || snapshot?.parentBoardName || '').trim();
+	}
+	async function readCurrentEdaSnapshot() {
+		const projectApi = edaApi?.dmt_Project;
+		const pcbApi = edaApi?.dmt_Pcb;
+		const boardApi = edaApi?.dmt_Board;
+		const call = async (owner, method) => {
+			if (!owner || typeof owner[method] !== 'function') return undefined;
+			try {
+				return await owner[method]();
+			} catch (_error) {
+				return undefined;
+			}
+		};
+		const [project, pcb, board] = await Promise.all([
+			call(projectApi, 'getCurrentProjectInfo'),
+			call(pcbApi, 'getCurrentPcbInfo'),
+			call(boardApi, 'getCurrentBoardInfo'),
+		]);
+		if (!project && !pcb && !board) {
+			throw new Error(
+				t(
+					'未读取到当前工程上下文。请先切换到已打开的原理图或 PCB 画布后重试；若仍失败，请在“环境自检”中确认 dmt_Project / dmt_Pcb / dmt_Board 可用。',
+					'Cannot read the current design context. Focus an opened schematic or PCB canvas and retry. If it still fails, verify dmt_Project / dmt_Pcb / dmt_Board in SelfCheck.',
+				),
+			);
+		}
+		return {
+			fetchedAt: iso(),
+			projectUuid: String(project?.uuid || pcb?.parentProjectUuid || board?.parentProjectUuid || '').trim(),
+			projectFriendlyName: String(project?.friendlyName || '').trim(),
+			projectName: String(project?.name || '').trim(),
+			projectDescription: String(project?.description || '').trim(),
+			projectDataCount: Array.isArray(project?.data) ? project.data.length : 0,
+			pcbUuid: String(pcb?.uuid || board?.pcb?.uuid || '').trim(),
+			pcbName: String(pcb?.name || board?.pcb?.name || '').trim(),
+			parentBoardName: String(pcb?.parentBoardName || '').trim(),
+			boardName: String(board?.name || '').trim(),
+			schematicUuid: String(board?.schematic?.uuid || '').trim(),
+			schematicName: String(board?.schematic?.name || '').trim(),
+		};
+	}
+	async function refreshCurrentEdaSnapshot(options) {
+		const silent = Boolean(options?.silent);
+		state.edaSnapshotLoading = true;
+		render();
+		try {
+			const snapshot = await readCurrentEdaSnapshot();
+			state.edaSnapshot = snapshot;
+			if (!silent) setStatus('success', t('已读取当前工程快照。', 'Current design snapshot loaded.'));
+			return snapshot;
+		} finally {
+			state.edaSnapshotLoading = false;
+			render();
+		}
+	}
+
 	function typeMap() {
 		return new Map(state.db.types.map((item) => [item.id, item]));
 	}
@@ -299,6 +365,22 @@
 	function status() {
 		return state.status ? `<div class="status-banner status-${e(state.statusKind)}">${e(state.status)}</div>` : '';
 	}
+	function currentEdaSnapshotCard() {
+		const snapshot = state.edaSnapshot;
+		const projectLabel = projectDisplayNameFromSnapshot(snapshot);
+		const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
+		const boardLabel = boardDisplayNameFromSnapshot(snapshot);
+		const refreshLabel = snapshot ? t('刷新当前工程快照', 'Refresh Snapshot') : t('读取当前工程快照', 'Load Snapshot');
+		const subtitle = state.edaSnapshotLoading
+			? t('正在读取当前工程上下文...', 'Reading current design context...')
+			: snapshot
+				? t(`上次读取：${time(snapshot.fetchedAt)}`, `Last loaded: ${time(snapshot.fetchedAt)}`)
+				: t('尚未读取当前工程上下文。', 'Current design context has not been loaded yet.');
+		const details = snapshot
+			? `<div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectLabel || '-')}</strong></div><div><span>${e(t('当前 PCB', 'Current PCB'))}</span><strong>${e(pcbLabel || '-')}</strong></div><div><span>${e(t('当前板子', 'Current Board'))}</span><strong>${e(boardLabel || '-')}</strong></div><div><span>${e(t('工程条目', 'Project Items'))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ''}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`工程链接名：${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ''}${snapshot.schematicName ? `<li>${e(t(`当前原理图：${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ''}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ''}</ul>`
+			: `<p class="empty-state">${e(t('切换到已打开的工程后点击“读取当前工程快照”，插件会读取当前工程、PCB 与板子信息。', 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
+		return `<article class="panel-card"><div class="section-head"><h2>${e(t('当前工程快照', 'Current Design Snapshot'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t('从当前工程导入 BOM', 'Import BOM from EDA'))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
+	}
 
 	function render() {
 		document.documentElement.setAttribute('data-theme', state.prefs.theme);
@@ -319,7 +401,7 @@
 		const warningCount = state.db.components.filter(warning).length;
 		const recordCount = state.db.components.reduce((sum, item) => sum + item.records.length, 0);
 		const bomCount = state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0);
-		return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t('元器件', 'Components'))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t('库存预警', 'Warnings'))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t('采购记录', 'Records'))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t('BOM 明细', 'BOM Items'))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t('快速入口', 'Quick Actions'))}</h2><div class="quick-actions"><button class="primary-button" data-action="view" data-view="components">${e(t('新增元器件', 'Add Component'))}</button><button class="ghost-button" data-action="view" data-view="projects">${e(t('维护项目/PCB', 'Manage Projects/PCB'))}</button><button class="ghost-button" data-action="view" data-view="stores">${e(t('维护店铺', 'Manage Stores'))}</button></div></article><article class="panel-card"><h2>${e(t('使用提示', 'Tips'))}</h2><ul class="info-list"><li>${e(t('建议定期导出 JSON 做离线备份。', 'Export JSON regularly for offline backup.'))}</li><li>${e(t('跨设备/跨账号可用导入恢复。', 'Use Import to restore across devices/accounts.'))}</li></ul></article></section>`;
+		return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t('元器件', 'Components'))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t('库存预警', 'Warnings'))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t('采购记录', 'Records'))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t('BOM 明细', 'BOM Items'))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t('快速入口', 'Quick Actions'))}</h2><div class="quick-actions"><button class="primary-button" data-action="view" data-view="components">${e(t('新增元器件', 'Add Component'))}</button><button class="ghost-button" data-action="view" data-view="projects">${e(t('维护项目/PCB', 'Manage Projects/PCB'))}</button><button class="ghost-button" data-action="view" data-view="stores">${e(t('维护店铺', 'Manage Stores'))}</button></div></article>${currentEdaSnapshotCard()}</section><section class="panel-card"><h2>${e(t('使用提示', 'Tips'))}</h2><ul class="info-list"><li>${e(t('建议定期导出 JSON 做离线备份。', 'Export JSON regularly for offline backup.'))}</li><li>${e(t('跨设备/跨账号可用导入恢复。', 'Use Import to restore across devices/accounts.'))}</li><li>${e(t('需要导入当前工程 BOM 时，先读取工程快照可以更直观看到将要写入的工程/PCB 来源。', 'Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM.'))}</li></ul></section>`;
 	}
 
 	function typesView() {
@@ -1220,6 +1302,7 @@
 	async function importEdaBomFromCurrent(): Promise<void> {
 		const pcbApi = edaApi?.pcb_ManufactureData;
 		const schApi = edaApi?.sch_ManufactureData;
+		const snapshot = await refreshCurrentEdaSnapshot({ silent: true }).catch(() => null);
 		const getBomFile =
 			pcbApi && typeof pcbApi.getBomFile === 'function'
 				? pcbApi.getBomFile.bind(pcbApi)
@@ -1314,9 +1397,41 @@
 
 		const now = new Date();
 		const nameSuffix = now.toLocaleString(locale(), { hour12: false });
-		const project = nProject({ id: id(), name: `EDA 导入 ${nameSuffix}`, note: t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.'), createdAt: iso(), updatedAt: iso() });
+		const projectLabel = projectDisplayNameFromSnapshot(snapshot);
+		const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
+		const boardLabel = boardDisplayNameFromSnapshot(snapshot);
+		const projectNoteLines = [t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.')];
+		if (projectLabel) projectNoteLines.push(`${t('来源工程', 'Source Project')}: ${projectLabel}`);
+		if (projectLabel && snapshot?.projectName && snapshot.projectName !== projectLabel) {
+			projectNoteLines.push(`${t('工程链接名', 'Project Slug')}: ${snapshot.projectName}`);
+		}
+		if (boardLabel) projectNoteLines.push(`${t('当前板子', 'Current Board')}: ${boardLabel}`);
+		if (pcbLabel) projectNoteLines.push(`${t('当前 PCB', 'Current PCB')}: ${pcbLabel}`);
+		if (snapshot?.projectUuid) projectNoteLines.push(`UUID: ${snapshot.projectUuid}`);
+		projectNoteLines.push(`${t('导入时间', 'Imported At')}: ${nameSuffix}`);
+		const pcbNoteLines = [t('从当前工程一键导入 BOM 自动生成。', 'Generated by one-click BOM import.')];
+		if (projectLabel) pcbNoteLines.push(`${t('来源工程', 'Source Project')}: ${projectLabel}`);
+		if (boardLabel) pcbNoteLines.push(`${t('来源板子', 'Source Board')}: ${boardLabel}`);
+		if (pcbLabel) pcbNoteLines.push(`${t('来源 PCB', 'Source PCB')}: ${pcbLabel}`);
+		const project = nProject({
+			id: id(),
+			name: projectLabel ? `${projectLabel} / ${t('EDA 导入', 'EDA Import')} ${nameSuffix}` : `EDA 导入 ${nameSuffix}`,
+			note: projectNoteLines.join('\n'),
+			createdAt: iso(),
+			updatedAt: iso(),
+		});
 		state.db.projects.push(project);
-		const pcb = nPcb({ id: id(), projectId: project.id, name: '当前工程 BOM', version: '', boardQuantity: 1, note: '', items: [], createdAt: iso(), updatedAt: iso() });
+		const pcb = nPcb({
+			id: id(),
+			projectId: project.id,
+			name: pcbLabel || t('当前工程 BOM', 'Current Design BOM'),
+			version: '',
+			boardQuantity: 1,
+			note: pcbNoteLines.join('\n'),
+			items: [],
+			createdAt: iso(),
+			updatedAt: iso(),
+		});
 		state.db.pcbs.push(pcb);
 
 		const ensureType = (typeName) => {
@@ -1374,7 +1489,15 @@
 		state.view = 'projects';
 		state.projectFilter = project.id;
 		state.modal = { type: 'bom', pcbId: pcb.id };
-		setStatus('success', t(`已导入 BOM：新增 ${createdComponents} 个元器件，新增 ${createdBomItems} 条 BOM 明细。`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`));
+		setStatus(
+			'success',
+			projectLabel
+				? t(
+						`已从 ${projectLabel} 导入 BOM：新增 ${createdComponents} 个元器件，新增 ${createdBomItems} 条 BOM 明细。`,
+						`BOM imported from ${projectLabel}: +${createdComponents} components, +${createdBomItems} BOM items.`,
+					)
+				: t(`已导入 BOM：新增 ${createdComponents} 个元器件，新增 ${createdBomItems} 条 BOM 明细。`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`),
+		);
 		render();
 	}
 
@@ -1863,6 +1986,7 @@
 			try {
 				state.status = '';
 				if (action === 'view') { state.view = target.dataset.view || 'dashboard'; render(); return; }
+				if (action === 'refresh-eda-snapshot') return refreshCurrentEdaSnapshot();
 				if (action === 'import') return importData();
 				if (action === 'import-eda-bom') return importEdaBomFromCurrent();
 				if (action === 'export-json') return exportJson();

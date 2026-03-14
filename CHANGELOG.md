@@ -2,6 +2,17 @@
 
 > 注：本仓库在 `1.0.9` 后未单独发布 `1.0.10`，版本直接进入 `1.1.x` 分支。
 
+# 1.1.14
+
+## 新增
+
+1. 新增“当前工程快照”卡片：基于嘉立创官方 `dmt_Project.getCurrentProjectInfo()`、`dmt_Pcb.getCurrentPcbInfo()`、`dmt_Board.getCurrentBoardInfo()` 读取当前工程/PCB/板子上下文，并在插件内展示最近一次读取结果。
+
+## 变更
+
+1. 优化“从当前工程导入 BOM”流程：导入时会优先带入当前工程真实名称、PCB 名称、板子名称与工程 UUID，并把这些来源信息写入新建项目/PCB 的备注中，便于后续追溯。
+2. 扩展“环境自检”输出：新增 `dmt_Project`、`dmt_Pcb`、`dmt_Board` 以及 `pcb_ManufactureData` / `sch_ManufactureData` 的可用性检查，便于定位宿主版本兼容性问题。
+
 # 1.1.12
 
 ## 修复

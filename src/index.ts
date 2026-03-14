@@ -118,6 +118,11 @@ export async function selfCheck(): Promise<void> {
 		const storageApi = (eda as any)?.sys_Storage;
 		const logApi = (eda as any)?.sys_Log;
 		const dialogApi = (eda as any)?.sys_Dialog;
+		const projectApi = (eda as any)?.dmt_Project;
+		const pcbTreeApi = (eda as any)?.dmt_Pcb;
+		const boardApi = (eda as any)?.dmt_Board;
+		const pcbManufactureApi = (eda as any)?.pcb_ManufactureData;
+		const schManufactureApi = (eda as any)?.sch_ManufactureData;
 		return {
 			sys_FileSystem: has(fsApi),
 			getExtensionFile: has(fsApi && typeof fsApi.getExtensionFile === 'function'),
@@ -133,6 +138,16 @@ export async function selfCheck(): Promise<void> {
 			setExtensionUserConfig: has(storageApi && typeof storageApi.setExtensionUserConfig === 'function'),
 			sys_Log: has(logApi),
 			sys_Dialog: has(dialogApi),
+			dmt_Project: has(projectApi),
+			getCurrentProjectInfo: has(projectApi && typeof projectApi.getCurrentProjectInfo === 'function'),
+			dmt_Pcb: has(pcbTreeApi),
+			getCurrentPcbInfo: has(pcbTreeApi && typeof pcbTreeApi.getCurrentPcbInfo === 'function'),
+			dmt_Board: has(boardApi),
+			getCurrentBoardInfo: has(boardApi && typeof boardApi.getCurrentBoardInfo === 'function'),
+			pcb_ManufactureData: has(pcbManufactureApi),
+			pcbGetBomFile: has(pcbManufactureApi && typeof pcbManufactureApi.getBomFile === 'function'),
+			sch_ManufactureData: has(schManufactureApi),
+			schGetBomFile: has(schManufactureApi && typeof schManufactureApi.getBomFile === 'function'),
 		};
 	})();
 

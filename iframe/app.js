@@ -97,7 +97,9 @@
     editingProjectId: null,
     editingPcbId: null,
     editingStoreId: null,
-    modal: null
+    modal: null,
+    edaSnapshot: null,
+    edaSnapshotLoading: false
   };
   function id() {
     return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -238,6 +240,70 @@
     state.db = nDb(state.db);
     await edaApi.sys_Storage.setExtensionUserConfig(DB_KEY, state.db);
   }
+  function projectDisplayNameFromSnapshot(snapshot) {
+    return String((snapshot == null ? void 0 : snapshot.projectFriendlyName) || (snapshot == null ? void 0 : snapshot.projectName) || "").trim();
+  }
+  function pcbDisplayNameFromSnapshot(snapshot) {
+    return String((snapshot == null ? void 0 : snapshot.pcbName) || (snapshot == null ? void 0 : snapshot.boardName) || (snapshot == null ? void 0 : snapshot.parentBoardName) || "").trim();
+  }
+  function boardDisplayNameFromSnapshot(snapshot) {
+    return String((snapshot == null ? void 0 : snapshot.boardName) || (snapshot == null ? void 0 : snapshot.parentBoardName) || "").trim();
+  }
+  async function readCurrentEdaSnapshot() {
+    var _a2, _b2, _c, _d;
+    const projectApi = edaApi == null ? void 0 : edaApi.dmt_Project;
+    const pcbApi = edaApi == null ? void 0 : edaApi.dmt_Pcb;
+    const boardApi = edaApi == null ? void 0 : edaApi.dmt_Board;
+    const call = async (owner, method) => {
+      if (!owner || typeof owner[method] !== "function") return void 0;
+      try {
+        return await owner[method]();
+      } catch (_error) {
+        return void 0;
+      }
+    };
+    const [project, pcb, board] = await Promise.all([
+      call(projectApi, "getCurrentProjectInfo"),
+      call(pcbApi, "getCurrentPcbInfo"),
+      call(boardApi, "getCurrentBoardInfo")
+    ]);
+    if (!project && !pcb && !board) {
+      throw new Error(
+        t(
+          "\u672A\u8BFB\u53D6\u5230\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002\u8BF7\u5148\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u539F\u7406\u56FE\u6216 PCB \u753B\u5E03\u540E\u91CD\u8BD5\uFF1B\u82E5\u4ECD\u5931\u8D25\uFF0C\u8BF7\u5728\u201C\u73AF\u5883\u81EA\u68C0\u201D\u4E2D\u786E\u8BA4 dmt_Project / dmt_Pcb / dmt_Board \u53EF\u7528\u3002",
+          "Cannot read the current design context. Focus an opened schematic or PCB canvas and retry. If it still fails, verify dmt_Project / dmt_Pcb / dmt_Board in SelfCheck."
+        )
+      );
+    }
+    return {
+      fetchedAt: iso(),
+      projectUuid: String((project == null ? void 0 : project.uuid) || (pcb == null ? void 0 : pcb.parentProjectUuid) || (board == null ? void 0 : board.parentProjectUuid) || "").trim(),
+      projectFriendlyName: String((project == null ? void 0 : project.friendlyName) || "").trim(),
+      projectName: String((project == null ? void 0 : project.name) || "").trim(),
+      projectDescription: String((project == null ? void 0 : project.description) || "").trim(),
+      projectDataCount: Array.isArray(project == null ? void 0 : project.data) ? project.data.length : 0,
+      pcbUuid: String((pcb == null ? void 0 : pcb.uuid) || ((_a2 = board == null ? void 0 : board.pcb) == null ? void 0 : _a2.uuid) || "").trim(),
+      pcbName: String((pcb == null ? void 0 : pcb.name) || ((_b2 = board == null ? void 0 : board.pcb) == null ? void 0 : _b2.name) || "").trim(),
+      parentBoardName: String((pcb == null ? void 0 : pcb.parentBoardName) || "").trim(),
+      boardName: String((board == null ? void 0 : board.name) || "").trim(),
+      schematicUuid: String(((_c = board == null ? void 0 : board.schematic) == null ? void 0 : _c.uuid) || "").trim(),
+      schematicName: String(((_d = board == null ? void 0 : board.schematic) == null ? void 0 : _d.name) || "").trim()
+    };
+  }
+  async function refreshCurrentEdaSnapshot(options) {
+    const silent = Boolean(options == null ? void 0 : options.silent);
+    state.edaSnapshotLoading = true;
+    render();
+    try {
+      const snapshot = await readCurrentEdaSnapshot();
+      state.edaSnapshot = snapshot;
+      if (!silent) setStatus("success", t("\u5DF2\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u3002", "Current design snapshot loaded."));
+      return snapshot;
+    } finally {
+      state.edaSnapshotLoading = false;
+      render();
+    }
+  }
   function typeMap() {
     return new Map(state.db.types.map((item) => [item.id, item]));
   }
@@ -263,6 +329,16 @@
   function status() {
     return state.status ? `<div class="status-banner status-${e(state.statusKind)}">${e(state.status)}</div>` : "";
   }
+  function currentEdaSnapshotCard() {
+    const snapshot = state.edaSnapshot;
+    const projectLabel = projectDisplayNameFromSnapshot(snapshot);
+    const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
+    const boardLabel = boardDisplayNameFromSnapshot(snapshot);
+    const refreshLabel = snapshot ? t("\u5237\u65B0\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Refresh Snapshot") : t("\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Load Snapshot");
+    const subtitle = state.edaSnapshotLoading ? t("\u6B63\u5728\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587...", "Reading current design context...") : snapshot ? t(`\u4E0A\u6B21\u8BFB\u53D6\uFF1A${time(snapshot.fetchedAt)}`, `Last loaded: ${time(snapshot.fetchedAt)}`) : t("\u5C1A\u672A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002", "Current design context has not been loaded yet.");
+    const details = snapshot ? `<div class="meta-grid"><div><span>${e(t("\u5DE5\u7A0B", "Project"))}</span><strong>${e(projectLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D PCB", "Current PCB"))}</span><strong>${e(pcbLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D\u677F\u5B50", "Current Board"))}</span><strong>${e(boardLabel || "-")}</strong></div><div><span>${e(t("\u5DE5\u7A0B\u6761\u76EE", "Project Items"))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ""}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`\u5DE5\u7A0B\u94FE\u63A5\u540D\uFF1A${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ""}${snapshot.schematicName ? `<li>${e(t(`\u5F53\u524D\u539F\u7406\u56FE\uFF1A${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ""}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ""}</ul>` : `<p class="empty-state">${e(t("\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u5DE5\u7A0B\u540E\u70B9\u51FB\u201C\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u201D\uFF0C\u63D2\u4EF6\u4F1A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u3001PCB \u4E0E\u677F\u5B50\u4FE1\u606F\u3002", 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
+    return `<article class="panel-card"><div class="section-head"><h2>${e(t("\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Current Design Snapshot"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? "disabled" : ""}>${e(refreshLabel)}</button><button class="primary-button" type="button" data-action="import-eda-bom">${e(t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u5BFC\u5165 BOM", "Import BOM from EDA"))}</button></div></div><p class="support-text">${e(subtitle)}</p>${details}</article>`;
+  }
   function render() {
     document.documentElement.setAttribute("data-theme", state.prefs.theme);
     app.innerHTML = `<div class="app-shell">${header()}${nav()}${status()}<main class="page-content">${view()}</main>${modal()}</div>`;
@@ -280,7 +356,7 @@
     const warningCount = state.db.components.filter(warning).length;
     const recordCount = state.db.components.reduce((sum, item) => sum + item.records.length, 0);
     const bomCount = state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0);
-    return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t("\u5143\u5668\u4EF6", "Components"))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t("\u5E93\u5B58\u9884\u8B66", "Warnings"))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t("\u91C7\u8D2D\u8BB0\u5F55", "Records"))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t("BOM \u660E\u7EC6", "BOM Items"))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u5FEB\u901F\u5165\u53E3", "Quick Actions"))}</h2><div class="quick-actions"><button class="primary-button" data-action="view" data-view="components">${e(t("\u65B0\u589E\u5143\u5668\u4EF6", "Add Component"))}</button><button class="ghost-button" data-action="view" data-view="projects">${e(t("\u7EF4\u62A4\u9879\u76EE/PCB", "Manage Projects/PCB"))}</button><button class="ghost-button" data-action="view" data-view="stores">${e(t("\u7EF4\u62A4\u5E97\u94FA", "Manage Stores"))}</button></div></article><article class="panel-card"><h2>${e(t("\u4F7F\u7528\u63D0\u793A", "Tips"))}</h2><ul class="info-list"><li>${e(t("\u5EFA\u8BAE\u5B9A\u671F\u5BFC\u51FA JSON \u505A\u79BB\u7EBF\u5907\u4EFD\u3002", "Export JSON regularly for offline backup."))}</li><li>${e(t("\u8DE8\u8BBE\u5907/\u8DE8\u8D26\u53F7\u53EF\u7528\u5BFC\u5165\u6062\u590D\u3002", "Use Import to restore across devices/accounts."))}</li></ul></article></section>`;
+    return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t("\u5143\u5668\u4EF6", "Components"))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t("\u5E93\u5B58\u9884\u8B66", "Warnings"))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t("\u91C7\u8D2D\u8BB0\u5F55", "Records"))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t("BOM \u660E\u7EC6", "BOM Items"))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u5FEB\u901F\u5165\u53E3", "Quick Actions"))}</h2><div class="quick-actions"><button class="primary-button" data-action="view" data-view="components">${e(t("\u65B0\u589E\u5143\u5668\u4EF6", "Add Component"))}</button><button class="ghost-button" data-action="view" data-view="projects">${e(t("\u7EF4\u62A4\u9879\u76EE/PCB", "Manage Projects/PCB"))}</button><button class="ghost-button" data-action="view" data-view="stores">${e(t("\u7EF4\u62A4\u5E97\u94FA", "Manage Stores"))}</button></div></article>${currentEdaSnapshotCard()}</section><section class="panel-card"><h2>${e(t("\u4F7F\u7528\u63D0\u793A", "Tips"))}</h2><ul class="info-list"><li>${e(t("\u5EFA\u8BAE\u5B9A\u671F\u5BFC\u51FA JSON \u505A\u79BB\u7EBF\u5907\u4EFD\u3002", "Export JSON regularly for offline backup."))}</li><li>${e(t("\u8DE8\u8BBE\u5907/\u8DE8\u8D26\u53F7\u53EF\u7528\u5BFC\u5165\u6062\u590D\u3002", "Use Import to restore across devices/accounts."))}</li><li>${e(t("\u9700\u8981\u5BFC\u5165\u5F53\u524D\u5DE5\u7A0B BOM \u65F6\uFF0C\u5148\u8BFB\u53D6\u5DE5\u7A0B\u5FEB\u7167\u53EF\u4EE5\u66F4\u76F4\u89C2\u770B\u5230\u5C06\u8981\u5199\u5165\u7684\u5DE5\u7A0B/PCB \u6765\u6E90\u3002", "Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM."))}</li></ul></section>`;
   }
   function typesView() {
     const current = active("types", state.editingTypeId);
@@ -1133,6 +1209,7 @@
   async function importEdaBomFromCurrent() {
     const pcbApi = edaApi == null ? void 0 : edaApi.pcb_ManufactureData;
     const schApi = edaApi == null ? void 0 : edaApi.sch_ManufactureData;
+    const snapshot = await refreshCurrentEdaSnapshot({ silent: true }).catch(() => null);
     const getBomFile = pcbApi && typeof pcbApi.getBomFile === "function" ? pcbApi.getBomFile.bind(pcbApi) : schApi && typeof schApi.getBomFile === "function" ? schApi.getBomFile.bind(schApi) : null;
     if (!getBomFile) {
       throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u672A\u63D0\u4F9B\u751F\u4EA7\u8D44\u6599 BOM \u5BFC\u51FA\u63A5\u53E3\uFF08pcb_ManufactureData/sch_ManufactureData\uFF09\u3002", "Manufacture BOM API not available."));
@@ -1212,9 +1289,41 @@
     }
     const now = /* @__PURE__ */ new Date();
     const nameSuffix = now.toLocaleString(locale(), { hour12: false });
-    const project = nProject({ id: id(), name: `EDA \u5BFC\u5165 ${nameSuffix}`, note: t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import."), createdAt: iso(), updatedAt: iso() });
+    const projectLabel = projectDisplayNameFromSnapshot(snapshot);
+    const pcbLabel = pcbDisplayNameFromSnapshot(snapshot);
+    const boardLabel = boardDisplayNameFromSnapshot(snapshot);
+    const projectNoteLines = [t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import.")];
+    if (projectLabel) projectNoteLines.push(`${t("\u6765\u6E90\u5DE5\u7A0B", "Source Project")}: ${projectLabel}`);
+    if (projectLabel && (snapshot == null ? void 0 : snapshot.projectName) && snapshot.projectName !== projectLabel) {
+      projectNoteLines.push(`${t("\u5DE5\u7A0B\u94FE\u63A5\u540D", "Project Slug")}: ${snapshot.projectName}`);
+    }
+    if (boardLabel) projectNoteLines.push(`${t("\u5F53\u524D\u677F\u5B50", "Current Board")}: ${boardLabel}`);
+    if (pcbLabel) projectNoteLines.push(`${t("\u5F53\u524D PCB", "Current PCB")}: ${pcbLabel}`);
+    if (snapshot == null ? void 0 : snapshot.projectUuid) projectNoteLines.push(`UUID: ${snapshot.projectUuid}`);
+    projectNoteLines.push(`${t("\u5BFC\u5165\u65F6\u95F4", "Imported At")}: ${nameSuffix}`);
+    const pcbNoteLines = [t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u4E00\u952E\u5BFC\u5165 BOM \u81EA\u52A8\u751F\u6210\u3002", "Generated by one-click BOM import.")];
+    if (projectLabel) pcbNoteLines.push(`${t("\u6765\u6E90\u5DE5\u7A0B", "Source Project")}: ${projectLabel}`);
+    if (boardLabel) pcbNoteLines.push(`${t("\u6765\u6E90\u677F\u5B50", "Source Board")}: ${boardLabel}`);
+    if (pcbLabel) pcbNoteLines.push(`${t("\u6765\u6E90 PCB", "Source PCB")}: ${pcbLabel}`);
+    const project = nProject({
+      id: id(),
+      name: projectLabel ? `${projectLabel} / ${t("EDA \u5BFC\u5165", "EDA Import")} ${nameSuffix}` : `EDA \u5BFC\u5165 ${nameSuffix}`,
+      note: projectNoteLines.join("\n"),
+      createdAt: iso(),
+      updatedAt: iso()
+    });
     state.db.projects.push(project);
-    const pcb = nPcb({ id: id(), projectId: project.id, name: "\u5F53\u524D\u5DE5\u7A0B BOM", version: "", boardQuantity: 1, note: "", items: [], createdAt: iso(), updatedAt: iso() });
+    const pcb = nPcb({
+      id: id(),
+      projectId: project.id,
+      name: pcbLabel || t("\u5F53\u524D\u5DE5\u7A0B BOM", "Current Design BOM"),
+      version: "",
+      boardQuantity: 1,
+      note: pcbNoteLines.join("\n"),
+      items: [],
+      createdAt: iso(),
+      updatedAt: iso()
+    });
     state.db.pcbs.push(pcb);
     const ensureType = (typeName) => {
       const name = String(typeName || "").trim() || "EDA\u5BFC\u5165";
@@ -1260,7 +1369,13 @@
     state.view = "projects";
     state.projectFilter = project.id;
     state.modal = { type: "bom", pcbId: pcb.id };
-    setStatus("success", t(`\u5DF2\u5BFC\u5165 BOM\uFF1A\u65B0\u589E ${createdComponents} \u4E2A\u5143\u5668\u4EF6\uFF0C\u65B0\u589E ${createdBomItems} \u6761 BOM \u660E\u7EC6\u3002`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`));
+    setStatus(
+      "success",
+      projectLabel ? t(
+        `\u5DF2\u4ECE ${projectLabel} \u5BFC\u5165 BOM\uFF1A\u65B0\u589E ${createdComponents} \u4E2A\u5143\u5668\u4EF6\uFF0C\u65B0\u589E ${createdBomItems} \u6761 BOM \u660E\u7EC6\u3002`,
+        `BOM imported from ${projectLabel}: +${createdComponents} components, +${createdBomItems} BOM items.`
+      ) : t(`\u5DF2\u5BFC\u5165 BOM\uFF1A\u65B0\u589E ${createdComponents} \u4E2A\u5143\u5668\u4EF6\uFF0C\u65B0\u589E ${createdBomItems} \u6761 BOM \u660E\u7EC6\u3002`, `BOM imported: +${createdComponents} components, +${createdBomItems} BOM items.`)
+    );
     render();
   }
   async function exportJson() {
@@ -1758,6 +1873,7 @@
           render();
           return;
         }
+        if (action === "refresh-eda-snapshot") return refreshCurrentEdaSnapshot();
         if (action === "import") return importData();
         if (action === "import-eda-bom") return importEdaBomFromCurrent();
         if (action === "export-json") return exportJson();
