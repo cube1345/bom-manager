@@ -1,5 +1,6 @@
 "use strict";
 (function() {
+  var _a, _b;
   const app = document.getElementById("app");
   const edaApi = window.eda || window.parent && window.parent.eda || window.top && window.top.eda;
   const DB_KEY = "bom-manager-db";
@@ -10,11 +11,69 @@
     return;
   }
   try {
+    const now = Date.now();
+    const writeLastError = (payload) => {
+      try {
+        if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === "function") {
+          void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-error", payload);
+        }
+      } catch (_e) {
+      }
+    };
+    window.addEventListener("error", (event) => {
+      try {
+        const err = event && event.error instanceof Error ? event.error : null;
+        writeLastError({
+          ts: Date.now(),
+          type: "error",
+          message: String((event == null ? void 0 : event.message) || (err == null ? void 0 : err.message) || "unknown"),
+          filename: String((event == null ? void 0 : event.filename) || ""),
+          lineno: Number((event == null ? void 0 : event.lineno) || 0),
+          colno: Number((event == null ? void 0 : event.colno) || 0),
+          stack: (err == null ? void 0 : err.stack) ? String(err.stack) : ""
+        });
+      } catch (_e) {
+      }
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      try {
+        const reason = event && event.reason ? event.reason : null;
+        const msg = reason instanceof Error ? `${reason.name}: ${reason.message}` : typeof reason === "string" ? reason : reason ? (() => {
+          try {
+            return JSON.stringify(reason);
+          } catch (_e) {
+            return String(reason);
+          }
+        })() : "unknown";
+        writeLastError({
+          ts: Date.now(),
+          type: "unhandledrejection",
+          message: msg,
+          stack: reason instanceof Error && reason.stack ? String(reason.stack) : ""
+        });
+      } catch (_e) {
+      }
+    });
     if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === "function") {
-      void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot-ts", Date.now());
+      const bootInfo = {
+        ts: now,
+        href: String((location == null ? void 0 : location.href) || ""),
+        baseURI: String((document == null ? void 0 : document.baseURI) || ""),
+        userAgent: String((navigator == null ? void 0 : navigator.userAgent) || "")
+      };
+      void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot-ts", now);
+      void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot", bootInfo);
     }
     if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === "function") {
-      edaApi.sys_MessageBus.publish("bom-manager-ready", { ts: Date.now() });
+      edaApi.sys_MessageBus.publish("bom-manager-ready", { ts: now });
+    }
+    try {
+      (_b = (_a = edaApi.sys_Log) == null ? void 0 : _a.add) == null ? void 0 : _b.call(
+        _a,
+        `[bom-manager iframe] boot ok ts=${now} baseURI=${String((document == null ? void 0 : document.baseURI) || "")}`,
+        "info"
+      );
+    } catch (_e) {
     }
   } catch (_error) {
   }
@@ -232,26 +291,26 @@
     const sMap = storeMap();
     const usage = /* @__PURE__ */ new Map();
     state.db.pcbs.forEach((pcb) => pcb.items.forEach((item) => {
-      var _a;
+      var _a2;
       if (!usage.has(item.componentId)) usage.set(item.componentId, { total: 0, names: /* @__PURE__ */ new Set() });
       const row = usage.get(item.componentId);
       row.total += item.quantityPerBoard * pcb.boardQuantity;
-      row.names.add(`${((_a = pMap.get(pcb.projectId)) == null ? void 0 : _a.name) || t("\u672A\u77E5\u9879\u76EE", "Unknown Project")}/${pcb.name}${pcb.version ? `(${pcb.version})` : ""}`);
+      row.names.add(`${((_a2 = pMap.get(pcb.projectId)) == null ? void 0 : _a2.name) || t("\u672A\u77E5\u9879\u76EE", "Unknown Project")}/${pcb.name}${pcb.version ? `(${pcb.version})` : ""}`);
     }));
     const list = sort(state.db.components, (item) => item.model).filter((item) => {
-      var _a;
+      var _a2;
       const keyword = state.componentFilter.keyword.trim().toLowerCase();
-      const typeName = ((_a = tMap.get(item.typeId)) == null ? void 0 : _a.name) || "";
+      const typeName = ((_a2 = tMap.get(item.typeId)) == null ? void 0 : _a2.name) || "";
       const hit = !keyword || [item.model, item.auxInfo, item.note, typeName].join(" ").toLowerCase().includes(keyword);
       const hitType = state.componentFilter.typeId === "all" || state.componentFilter.typeId === item.typeId;
       const hitWarning = !state.componentFilter.warningOnly || warning(item);
       return hit && hitType && hitWarning;
     });
     return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(current ? t("\u7F16\u8F91\u5143\u5668\u4EF6", "Edit Component") : t("\u65B0\u589E\u5143\u5668\u4EF6", "New Component"))}</h2><form id="component-form" class="stack-form"><input type="hidden" name="componentId" value="${e((current == null ? void 0 : current.id) || "")}" /><label><span>${e(t("\u7C7B\u578B", "Type"))}</span><select name="typeId" required><option value="">${e(t("\u8BF7\u9009\u62E9\u7C7B\u578B", "Select type"))}</option>${sort(state.db.types, (item) => item.name).map((item) => `<option value="${item.id}" ${(current == null ? void 0 : current.typeId) === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></label><label><span>${e(t("\u578B\u53F7", "Model"))}</span><input name="model" required value="${e((current == null ? void 0 : current.model) || "")}" /></label><label><span>${e(t("\u9884\u8B66\u9608\u503C", "Warning Threshold"))}</span><input name="warningThreshold" type="number" min="0" step="1" value="${e((current == null ? void 0 : current.warningThreshold) || 0)}" /></label><label><span>${e(t("\u8F85\u52A9\u4FE1\u606F", "Aux Info"))}</span><textarea name="auxInfo">${e((current == null ? void 0 : current.auxInfo) || "")}</textarea></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((current == null ? void 0 : current.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(current ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${current ? `<button class="ghost-button" type="button" data-action="cancel-component">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article><article class="panel-card"><h2>${e(t("\u641C\u7D22\u4E0E\u7B5B\u9009", "Filter"))}</h2><div class="stack-form"><label><span>${e(t("\u5173\u952E\u8BCD", "Keyword"))}</span><input data-filter="component-keyword" value="${e(state.componentFilter.keyword)}" placeholder="${e(t("\u578B\u53F7/\u5907\u6CE8/\u7C7B\u578B", "Model/note/type"))}" /></label><label><span>${e(t("\u7C7B\u578B\u7B5B\u9009", "Type Filter"))}</span><select data-filter="component-type"><option value="all">${e(t("\u5168\u90E8\u7C7B\u578B", "All Types"))}</option>${sort(state.db.types, (item) => item.name).map((item) => `<option value="${item.id}" ${state.componentFilter.typeId === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></label><label class="checkbox-row"><input data-filter="component-warning" type="checkbox" ${state.componentFilter.warningOnly ? "checked" : ""} /><span>${e(t("\u4EC5\u663E\u793A\u5E93\u5B58\u9884\u8B66", "Only warnings"))}</span></label></div></article></section><section class="panel-card"><h2>${e(t("\u5143\u5668\u4EF6\u5217\u8868", "Component List"))}</h2><div class="stack-list">${list.map((item) => {
-      var _a, _b;
-      return `<article class="entity-card ${warning(item) ? "warning-entity" : ""}"><header class="entity-header"><div><h3>${e(item.model)}</h3><p>${e(((_a = tMap.get(item.typeId)) == null ? void 0 : _a.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</p></div><div class="inline-actions">${warning(item) ? `<span class="pill pill-warning">${e(t("\u5E93\u5B58\u9884\u8B66", "Low Stock"))}</span>` : ""}<button class="ghost-button" type="button" data-action="edit-component" data-id="${item.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-component" data-id="${item.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="meta-grid"><div><span>${e(t("\u603B\u5E93\u5B58", "Total"))}</span><strong>${item.totalQuantity}</strong></div><div><span>${e(t("\u6700\u4F4E\u4EF7\u683C", "Lowest"))}</span><strong>${item.lowestPrice === null ? "-" : `\xA5${item.lowestPrice.toFixed(2)}`}</strong></div><div><span>${e(t("PCB \u9700\u6C42", "PCB Demand"))}</span><strong>${((_b = usage.get(item.id)) == null ? void 0 : _b.total) || 0}</strong></div></div>${item.auxInfo ? `<p class="support-text">${e(item.auxInfo)}</p>` : ""}<div class="subsection-head"><h4>${e(t("\u91C7\u8D2D\u8BB0\u5F55", "Purchase Records"))} (${item.records.length})</h4><button class="primary-button" type="button" data-action="record-modal" data-component-id="${item.id}">${e(t("\u65B0\u589E\u8BB0\u5F55", "Add Record"))}</button></div><div class="table-wrap"><table><thead><tr><th>${e(t("\u5E97\u94FA", "Store"))}</th><th>${e(t("\u5E73\u53F0", "Platform"))}</th><th>${e(t("\u6570\u91CF", "Qty"))}</th><th>${e(t("\u5355\u4EF7", "Price"))}</th><th>${e(t("\u65F6\u95F4", "Time"))}</th><th>${e(t("\u64CD\u4F5C", "Actions"))}</th></tr></thead><tbody>${sort(item.records, (record) => `${record.platform}-${record.purchasedAt}`).map((record) => {
-        var _a2, _b2;
-        return `<tr><td>${e(record.storeId ? `${((_a2 = sMap.get(record.storeId)) == null ? void 0 : _a2.platform) || ""}/${((_b2 = sMap.get(record.storeId)) == null ? void 0 : _b2.shopName) || ""}` : "-")}</td><td>${e(record.platform)}</td><td>${record.quantity}</td><td>${e(`\xA5${record.pricePerUnit.toFixed(2)}`)}</td><td>${e(time(record.purchasedAt))}</td><td><div class="inline-actions"><a class="text-link" href="${e(record.link)}" target="_blank" rel="noreferrer">${e(t("\u6253\u5F00", "Open"))}</a><button class="ghost-button" type="button" data-action="record-modal" data-component-id="${item.id}" data-record-id="${record.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-record" data-component-id="${item.id}" data-record-id="${record.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></td></tr>`;
+      var _a2, _b2;
+      return `<article class="entity-card ${warning(item) ? "warning-entity" : ""}"><header class="entity-header"><div><h3>${e(item.model)}</h3><p>${e(((_a2 = tMap.get(item.typeId)) == null ? void 0 : _a2.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</p></div><div class="inline-actions">${warning(item) ? `<span class="pill pill-warning">${e(t("\u5E93\u5B58\u9884\u8B66", "Low Stock"))}</span>` : ""}<button class="ghost-button" type="button" data-action="edit-component" data-id="${item.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-component" data-id="${item.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="meta-grid"><div><span>${e(t("\u603B\u5E93\u5B58", "Total"))}</span><strong>${item.totalQuantity}</strong></div><div><span>${e(t("\u6700\u4F4E\u4EF7\u683C", "Lowest"))}</span><strong>${item.lowestPrice === null ? "-" : `\xA5${item.lowestPrice.toFixed(2)}`}</strong></div><div><span>${e(t("PCB \u9700\u6C42", "PCB Demand"))}</span><strong>${((_b2 = usage.get(item.id)) == null ? void 0 : _b2.total) || 0}</strong></div></div>${item.auxInfo ? `<p class="support-text">${e(item.auxInfo)}</p>` : ""}<div class="subsection-head"><h4>${e(t("\u91C7\u8D2D\u8BB0\u5F55", "Purchase Records"))} (${item.records.length})</h4><button class="primary-button" type="button" data-action="record-modal" data-component-id="${item.id}">${e(t("\u65B0\u589E\u8BB0\u5F55", "Add Record"))}</button></div><div class="table-wrap"><table><thead><tr><th>${e(t("\u5E97\u94FA", "Store"))}</th><th>${e(t("\u5E73\u53F0", "Platform"))}</th><th>${e(t("\u6570\u91CF", "Qty"))}</th><th>${e(t("\u5355\u4EF7", "Price"))}</th><th>${e(t("\u65F6\u95F4", "Time"))}</th><th>${e(t("\u64CD\u4F5C", "Actions"))}</th></tr></thead><tbody>${sort(item.records, (record) => `${record.platform}-${record.purchasedAt}`).map((record) => {
+        var _a3, _b3;
+        return `<tr><td>${e(record.storeId ? `${((_a3 = sMap.get(record.storeId)) == null ? void 0 : _a3.platform) || ""}/${((_b3 = sMap.get(record.storeId)) == null ? void 0 : _b3.shopName) || ""}` : "-")}</td><td>${e(record.platform)}</td><td>${record.quantity}</td><td>${e(`\xA5${record.pricePerUnit.toFixed(2)}`)}</td><td>${e(time(record.purchasedAt))}</td><td><div class="inline-actions"><a class="text-link" href="${e(record.link)}" target="_blank" rel="noreferrer">${e(t("\u6253\u5F00", "Open"))}</a><button class="ghost-button" type="button" data-action="record-modal" data-component-id="${item.id}" data-record-id="${record.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-record" data-component-id="${item.id}" data-record-id="${record.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></td></tr>`;
       }).join("") || `<tr><td colspan="6" class="empty-state">${e(t("\u6682\u65E0\u91C7\u8D2D\u8BB0\u5F55\u3002", "No records."))}</td></tr>`}</tbody></table></div></article>`;
     }).join("") || `<p class="empty-state">${e(t("\u6682\u65E0\u5143\u5668\u4EF6\u6570\u636E\u3002", "No component data."))}</p>`}</div></section>`;
   }
@@ -264,18 +323,18 @@
     const pcbs = state.projectFilter === "all" ? state.db.pcbs : state.db.pcbs.filter((item) => item.projectId === state.projectFilter);
     const summary = /* @__PURE__ */ new Map();
     pcbs.forEach((pcb) => pcb.items.forEach((item) => {
-      var _a;
+      var _a2;
       if (!summary.has(item.componentId)) summary.set(item.componentId, { total: 0, names: /* @__PURE__ */ new Set() });
       const row = summary.get(item.componentId);
       row.total += item.quantityPerBoard * pcb.boardQuantity;
-      row.names.add(`${((_a = pMap.get(pcb.projectId)) == null ? void 0 : _a.name) || ""}/${pcb.name}`);
+      row.names.add(`${((_a2 = pMap.get(pcb.projectId)) == null ? void 0 : _a2.name) || ""}/${pcb.name}`);
     }));
     return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(currentProject ? t("\u7F16\u8F91\u9879\u76EE", "Edit Project") : t("\u65B0\u589E\u9879\u76EE", "New Project"))}</h2><form id="project-form" class="stack-form"><input type="hidden" name="projectId" value="${e((currentProject == null ? void 0 : currentProject.id) || "")}" /><label><span>${e(t("\u9879\u76EE\u540D\u79F0", "Project Name"))}</span><input name="name" required value="${e((currentProject == null ? void 0 : currentProject.name) || "")}" /></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((currentProject == null ? void 0 : currentProject.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentProject ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${currentProject ? `<button class="ghost-button" type="button" data-action="cancel-project">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article><article class="panel-card"><h2>${e(currentPcb ? t("\u7F16\u8F91 PCB", "Edit PCB") : t("\u65B0\u589E PCB", "New PCB"))}</h2><form id="pcb-form" class="stack-form"><input type="hidden" name="pcbId" value="${e((currentPcb == null ? void 0 : currentPcb.id) || "")}" /><label><span>${e(t("\u6240\u5C5E\u9879\u76EE", "Project"))}</span><select name="projectId" required><option value="">${e(t("\u8BF7\u9009\u62E9\u9879\u76EE", "Select project"))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${(currentPcb == null ? void 0 : currentPcb.projectId) === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></label><label><span>${e(t("PCB \u540D\u79F0", "PCB Name"))}</span><input name="name" required value="${e((currentPcb == null ? void 0 : currentPcb.name) || "")}" /></label><label><span>${e(t("\u7248\u672C\u53F7", "Version"))}</span><input name="version" value="${e((currentPcb == null ? void 0 : currentPcb.version) || "")}" /></label><label><span>${e(t("\u9879\u76EE\u7528\u677F\u6570\u91CF", "Board Qty"))}</span><input name="boardQuantity" type="number" min="1" step="1" value="${e((currentPcb == null ? void 0 : currentPcb.boardQuantity) || 1)}" /></label><label><span>${e(t("\u5907\u6CE8", "Note"))}</span><textarea name="note">${e((currentPcb == null ? void 0 : currentPcb.note) || "")}</textarea></label><div class="inline-actions"><button class="primary-button" type="submit">${e(currentPcb ? t("\u66F4\u65B0", "Update") : t("\u65B0\u589E", "Create"))}</button>${currentPcb ? `<button class="ghost-button" type="button" data-action="cancel-pcb">${e(t("\u53D6\u6D88", "Cancel"))}</button>` : ""}</div></form></article></section><section class="panel-card"><div class="section-head"><h2>${e(t("\u9700\u6C42\u7EDF\u8BA1", "Requirement Summary"))}</h2><select data-filter="project-filter"><option value="all">${e(t("\u5168\u90E8\u9879\u76EE", "All Projects"))}</option>${sort(state.db.projects, (item) => item.name).map((item) => `<option value="${item.id}" ${state.projectFilter === item.id ? "selected" : ""}>${e(item.name)}</option>`).join("")}</select></div><div class="table-wrap"><table><thead><tr><th>${e(t("\u7C7B\u578B", "Type"))}</th><th>${e(t("\u578B\u53F7", "Model"))}</th><th>${e(t("\u603B\u9700\u6C42", "Demand"))}</th><th>${e(t("\u6D89\u53CA PCB", "PCB"))}</th></tr></thead><tbody>${Array.from(summary.entries()).sort((a, b) => {
-      var _a, _b;
-      return (((_a = cMap.get(a[0])) == null ? void 0 : _a.model) || "").localeCompare(((_b = cMap.get(b[0])) == null ? void 0 : _b.model) || "", locale());
+      var _a2, _b2;
+      return (((_a2 = cMap.get(a[0])) == null ? void 0 : _a2.model) || "").localeCompare(((_b2 = cMap.get(b[0])) == null ? void 0 : _b2.model) || "", locale());
     }).map(([componentId, info]) => {
-      var _a, _b, _c;
-      return `<tr><td>${e(((_b = tMap.get((_a = cMap.get(componentId)) == null ? void 0 : _a.typeId)) == null ? void 0 : _b.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</td><td>${e(((_c = cMap.get(componentId)) == null ? void 0 : _c.model) || t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t("\uFF0C", ", ")))}</td></tr>`;
+      var _a2, _b2, _c;
+      return `<tr><td>${e(((_b2 = tMap.get((_a2 = cMap.get(componentId)) == null ? void 0 : _a2.typeId)) == null ? void 0 : _b2.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</td><td>${e(((_c = cMap.get(componentId)) == null ? void 0 : _c.model) || t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"))}</td><td>${info.total}</td><td>${e(Array.from(info.names).join(t("\uFF0C", ", ")))}</td></tr>`;
     }).join("") || `<tr><td colspan="4" class="empty-state">${e(t("\u6682\u65E0\u7EDF\u8BA1\u6570\u636E\u3002", "No summary data."))}</td></tr>`}</tbody></table></div></section><section class="panel-card"><h2>${e(t("\u9879\u76EE\u4E0E PCB", "Projects and PCB"))}</h2><div class="stack-list">${sort(state.db.projects.filter((item) => state.projectFilter === "all" || item.id === state.projectFilter), (item) => item.name).map((project) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(project.name)}</h3><p>${e(project.note || t("\u65E0\u9879\u76EE\u5907\u6CE8", "No note"))}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="edit-project" data-id="${project.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-project" data-id="${project.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="stack-list nested-list">${sort(state.db.pcbs.filter((item) => item.projectId === project.id), (item) => `${item.name}${item.version}`).map((pcb) => `<div class="list-row"><div><strong>${e(`${pcb.name}${pcb.version ? ` (${pcb.version})` : ""}`)}</strong><p>${e(t(`\u9879\u76EE\u6570\u91CF ${pcb.boardQuantity} / BOM ${pcb.items.length}`, `Qty ${pcb.boardQuantity} / BOM ${pcb.items.length}`))}</p></div><div class="inline-actions"><button class="primary-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}">${e(t("\u7EF4\u62A4 BOM", "Manage BOM"))}</button><button class="ghost-button" type="button" data-action="edit-pcb" data-id="${pcb.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-pcb" data-id="${pcb.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></div>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0 PCB\u3002", "No PCB."))}</p>`}</div></article>`).join("") || `<p class="empty-state">${e(t("\u6682\u65E0\u9879\u76EE\u6570\u636E\u3002", "No project data."))}</p>`}</div></section>`;
   }
   function storesView() {
@@ -293,12 +352,12 @@
     return "";
   }
   function xlsxMapModal() {
-    var _a, _b, _c;
+    var _a2, _b2, _c;
     const workbook = state.modal.workbook;
     const sheetName = state.modal.sheetName;
     const targetKind = state.modal.targetKind;
-    const sheetNames = ((_a = workbook == null ? void 0 : workbook.sheets) == null ? void 0 : _a.map((sheet) => sheet.name)) || [];
-    const currentSheet = ((_b = workbook == null ? void 0 : workbook.sheets) == null ? void 0 : _b.find((sheet) => sheet.name === sheetName)) || null;
+    const sheetNames = ((_a2 = workbook == null ? void 0 : workbook.sheets) == null ? void 0 : _a2.map((sheet) => sheet.name)) || [];
+    const currentSheet = ((_b2 = workbook == null ? void 0 : workbook.sheets) == null ? void 0 : _b2.find((sheet) => sheet.name === sheetName)) || null;
     const headers = (((_c = currentSheet == null ? void 0 : currentSheet.rows) == null ? void 0 : _c[0]) || []).map((item) => String(item || "").trim()).filter(Boolean);
     const options = (value) => `<option value="${e(value)}">${e(value)}</option>`;
     const mapRow = (idValue, labelZh, labelEn, required) => {
@@ -319,14 +378,14 @@
     const cMap = new Map(state.db.components.map((item) => [item.id, item]));
     const tMap = typeMap();
     return `<div class="modal-backdrop" data-action="close-modal"><div class="modal-panel wide-panel" data-modal-root="true"><div class="section-head"><h2>${e(current ? t("\u7F16\u8F91 BOM \u660E\u7EC6", "Edit BOM Item") : t("\u65B0\u589E BOM \u660E\u7EC6", "Add BOM Item"))}</h2><button class="ghost-button" type="button" data-action="close-modal">${e(t("\u5173\u95ED", "Close"))}</button></div><form id="bom-form" class="stack-form"><input type="hidden" name="pcbId" value="${pcb.id}" /><input type="hidden" name="itemId" value="${e((current == null ? void 0 : current.id) || "")}" /><label><span>${e(t("\u5143\u5668\u4EF6", "Component"))}</span><select name="componentId" required><option value="">${e(t("\u8BF7\u9009\u62E9\u5143\u5668\u4EF6", "Select Component"))}</option>${sort(state.db.components, (item) => item.model).map((item) => {
-      var _a;
-      return `<option value="${item.id}" ${(current == null ? void 0 : current.componentId) === item.id ? "selected" : ""}>${e(`${((_a = tMap.get(item.typeId)) == null ? void 0 : _a.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type")} / ${item.model}`)}</option>`;
+      var _a2;
+      return `<option value="${item.id}" ${(current == null ? void 0 : current.componentId) === item.id ? "selected" : ""}>${e(`${((_a2 = tMap.get(item.typeId)) == null ? void 0 : _a2.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type")} / ${item.model}`)}</option>`;
     }).join("")}</select></label><label><span>${e(t("\u5355\u677F\u9700\u6C42\u6570\u91CF", "Qty per Board"))}</span><input name="quantityPerBoard" type="number" min="1" step="1" required value="${e((current == null ? void 0 : current.quantityPerBoard) || 1)}" /></label><button class="primary-button" type="submit">${e(current ? t("\u4FDD\u5B58", "Save") : t("\u65B0\u589E", "Add"))}</button></form><div class="table-wrap"><table><thead><tr><th>${e(t("\u7C7B\u578B", "Type"))}</th><th>${e(t("\u578B\u53F7", "Model"))}</th><th>${e(t("\u5355\u677F\u9700\u6C42", "Per Board"))}</th><th>${e(t("\u9879\u76EE\u603B\u9700\u6C42", "Project Total"))}</th><th>${e(t("\u64CD\u4F5C", "Actions"))}</th></tr></thead><tbody>${sort(pcb.items, (item) => {
-      var _a;
-      return ((_a = cMap.get(item.componentId)) == null ? void 0 : _a.model) || "";
+      var _a2;
+      return ((_a2 = cMap.get(item.componentId)) == null ? void 0 : _a2.model) || "";
     }).map((item) => {
-      var _a, _b, _c;
-      return `<tr><td>${e(((_b = tMap.get((_a = cMap.get(item.componentId)) == null ? void 0 : _a.typeId)) == null ? void 0 : _b.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</td><td>${e(((_c = cMap.get(item.componentId)) == null ? void 0 : _c.model) || t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"))}</td><td>${item.quantityPerBoard}</td><td>${item.quantityPerBoard * pcb.boardQuantity}</td><td><div class="inline-actions"><button class="ghost-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}" data-item-id="${item.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-bom-item" data-pcb-id="${pcb.id}" data-item-id="${item.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></td></tr>`;
+      var _a2, _b2, _c;
+      return `<tr><td>${e(((_b2 = tMap.get((_a2 = cMap.get(item.componentId)) == null ? void 0 : _a2.typeId)) == null ? void 0 : _b2.name) || t("\u672A\u77E5\u7C7B\u578B", "Unknown Type"))}</td><td>${e(((_c = cMap.get(item.componentId)) == null ? void 0 : _c.model) || t("\u672A\u77E5\u5143\u5668\u4EF6", "Unknown Component"))}</td><td>${item.quantityPerBoard}</td><td>${item.quantityPerBoard * pcb.boardQuantity}</td><td><div class="inline-actions"><button class="ghost-button" type="button" data-action="bom-modal" data-pcb-id="${pcb.id}" data-item-id="${item.id}">${e(t("\u7F16\u8F91", "Edit"))}</button><button class="danger-button" type="button" data-action="delete-bom-item" data-pcb-id="${pcb.id}" data-item-id="${item.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></td></tr>`;
     }).join("") || `<tr><td colspan="5" class="empty-state">${e(t("\u6682\u65E0 BOM \u660E\u7EC6\u3002", "No BOM items."))}</td></tr>`}</tbody></table></div></div></div>`;
   }
   function jsonText() {
@@ -339,14 +398,14 @@
     const sMap = storeMap();
     const table = (title, headers, rows) => `<h2>${e(title)}</h2><table><thead><tr>${headers.map((item) => `<th>${e(item)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((item) => `<td>${e(item)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
     return `\uFEFF<html><head><meta charset="utf-8" /><style>body{font-family:"Microsoft YaHei",sans-serif}table{border-collapse:collapse;width:100%;margin-bottom:14px}th,td{border:1px solid #ccd4e4;padding:6px 8px;font-size:12px}th{background:#edf2ff}</style></head><body>${table("\u7C7B\u578B", ["id", "\u540D\u79F0", "\u4E00\u7EA7\u7C7B\u578B", "\u4E8C\u7EA7\u7C7B\u578B"], state.db.types.map((item) => [item.id, item.name, item.primaryName, item.secondaryName || ""]))}${table("\u9879\u76EE", ["id", "\u540D\u79F0", "\u5907\u6CE8"], state.db.projects.map((item) => [item.id, item.name, item.note]))}${table("\u5143\u5668\u4EF6", ["id", "\u7C7B\u578B", "\u578B\u53F7", "\u603B\u5E93\u5B58", "\u9884\u8B66\u9608\u503C", "\u6700\u4F4E\u4EF7\u683C"], state.db.components.map((item) => {
-      var _a, _b;
-      return [item.id, ((_a = tMap.get(item.typeId)) == null ? void 0 : _a.name) || "\u672A\u77E5\u7C7B\u578B", item.model, item.totalQuantity, item.warningThreshold, (_b = item.lowestPrice) != null ? _b : ""];
+      var _a2, _b2;
+      return [item.id, ((_a2 = tMap.get(item.typeId)) == null ? void 0 : _a2.name) || "\u672A\u77E5\u7C7B\u578B", item.model, item.totalQuantity, item.warningThreshold, (_b2 = item.lowestPrice) != null ? _b2 : ""];
     }))}${table("\u91C7\u8D2D\u8BB0\u5F55", ["\u8BB0\u5F55id", "\u5143\u5668\u4EF6", "\u5E97\u94FA", "\u5E73\u53F0", "\u6570\u91CF", "\u5355\u4EF7", "\u65F6\u95F4"], state.db.components.flatMap((component) => component.records.map((record) => {
-      var _a, _b;
-      return [record.id, component.model, record.storeId ? `${((_a = sMap.get(record.storeId)) == null ? void 0 : _a.platform) || ""}/${((_b = sMap.get(record.storeId)) == null ? void 0 : _b.shopName) || ""}` : "-", record.platform, record.quantity, record.pricePerUnit, record.purchasedAt];
+      var _a2, _b2;
+      return [record.id, component.model, record.storeId ? `${((_a2 = sMap.get(record.storeId)) == null ? void 0 : _a2.platform) || ""}/${((_b2 = sMap.get(record.storeId)) == null ? void 0 : _b2.shopName) || ""}` : "-", record.platform, record.quantity, record.pricePerUnit, record.purchasedAt];
     })))}${table("PCB", ["id", "\u9879\u76EE", "PCB", "\u7248\u672C", "\u6570\u91CF"], state.db.pcbs.map((item) => {
-      var _a;
-      return [item.id, ((_a = pMap.get(item.projectId)) == null ? void 0 : _a.name) || "\u672A\u77E5\u9879\u76EE", item.name, item.version, item.boardQuantity];
+      var _a2;
+      return [item.id, ((_a2 = pMap.get(item.projectId)) == null ? void 0 : _a2.name) || "\u672A\u77E5\u9879\u76EE", item.name, item.version, item.boardQuantity];
     }))}</body></html>`;
   }
   function parseCsv(text) {
@@ -657,7 +716,7 @@
     return out;
   }
   function parseSheetXml(xmlText, sharedStrings) {
-    var _a, _b, _c;
+    var _a2, _b2, _c;
     const doc = new DOMParser().parseFromString(xmlText, "application/xml");
     const sheetData = doc.getElementsByTagName("sheetData")[0];
     if (!sheetData) return [];
@@ -674,9 +733,9 @@
         const type = cell.getAttribute("t") || "";
         let value = "";
         if (type === "s") {
-          const v = ((_a = cell.getElementsByTagName("v")[0]) == null ? void 0 : _a.textContent) || "";
+          const v = ((_a2 = cell.getElementsByTagName("v")[0]) == null ? void 0 : _a2.textContent) || "";
           const idx = Number(v);
-          value = (_b = sharedStrings[idx]) != null ? _b : "";
+          value = (_b2 = sharedStrings[idx]) != null ? _b2 : "";
         } else if (type === "inlineStr") {
           const tNode = cell.getElementsByTagName("t")[0];
           value = (tNode == null ? void 0 : tNode.textContent) || "";
@@ -730,10 +789,10 @@
     return { sheets };
   }
   function isBomManagerExportXlsx(workbook) {
-    var _a, _b;
+    var _a2, _b2;
     const meta = workbook.sheets.find((sheet) => sheet.name === "__BOM_MANAGER__");
     if (!meta) return false;
-    const first = String(((_b = (_a = meta.rows) == null ? void 0 : _a[0]) == null ? void 0 : _b[0]) || "").trim();
+    const first = String(((_b2 = (_a2 = meta.rows) == null ? void 0 : _a2[0]) == null ? void 0 : _b2[0]) || "").trim();
     return first === "bom-manager-export";
   }
   async function importBomManagerExportXlsx(workbook) {
@@ -760,10 +819,10 @@
     render();
   }
   function pickRowValueByHeader(headers, row, headerName) {
-    var _a;
+    var _a2;
     if (!headerName) return "";
     const idx = headers.findIndex((h) => String(h || "").trim() === String(headerName || "").trim());
-    return idx >= 0 ? String((_a = row == null ? void 0 : row[idx]) != null ? _a : "").trim() : "";
+    return idx >= 0 ? String((_a2 = row == null ? void 0 : row[idx]) != null ? _a2 : "").trim() : "";
   }
   async function importXlsxMapped(values) {
     if (!state.modal || state.modal.type !== "xlsx-map") return;
@@ -967,12 +1026,12 @@
     const componentsRows = [
       [t("\u7C7B\u578B", "Type"), t("\u578B\u53F7", "Model"), t("\u603B\u5E93\u5B58", "Total"), t("\u9884\u8B66\u9608\u503C", "Warn"), t("\u6700\u4F4E\u4EF7\u683C", "Lowest"), t("\u8F85\u52A9\u4FE1\u606F", "Aux"), t("\u5907\u6CE8", "Note")],
       ...sort(state.db.components, (item) => {
-        var _a;
-        return `${((_a = tMap.get(item.typeId)) == null ? void 0 : _a.name) || ""}${item.model}`;
+        var _a2;
+        return `${((_a2 = tMap.get(item.typeId)) == null ? void 0 : _a2.name) || ""}${item.model}`;
       }).map((item) => {
-        var _a;
+        var _a2;
         return [
-          ((_a = tMap.get(item.typeId)) == null ? void 0 : _a.name) || "",
+          ((_a2 = tMap.get(item.typeId)) == null ? void 0 : _a2.name) || "",
           item.model,
           item.totalQuantity,
           item.warningThreshold,
@@ -985,11 +1044,11 @@
     const recordsRows = [
       [t("\u7C7B\u578B", "Type"), t("\u578B\u53F7", "Model"), t("\u5E97\u94FA", "Store"), t("\u5E73\u53F0", "Platform"), t("\u94FE\u63A5", "Link"), t("\u6570\u91CF", "Qty"), t("\u5355\u4EF7", "Price"), t("\u65F6\u95F4", "Purchased At")],
       ...state.db.components.flatMap((component) => component.records.map((record) => {
-        var _a, _b, _c;
+        var _a2, _b2, _c;
         return [
-          ((_a = tMap.get(component.typeId)) == null ? void 0 : _a.name) || "",
+          ((_a2 = tMap.get(component.typeId)) == null ? void 0 : _a2.name) || "",
           component.model,
-          record.storeId ? `${((_b = sMap.get(record.storeId)) == null ? void 0 : _b.platform) || ""}/${((_c = sMap.get(record.storeId)) == null ? void 0 : _c.shopName) || ""}` : "",
+          record.storeId ? `${((_b2 = sMap.get(record.storeId)) == null ? void 0 : _b2.platform) || ""}/${((_c = sMap.get(record.storeId)) == null ? void 0 : _c.shopName) || ""}` : "",
           record.platform,
           record.link,
           record.quantity,
@@ -1009,12 +1068,12 @@
     const pcbsRows = [
       [t("\u9879\u76EE", "Project"), t("PCB", "PCB"), t("\u7248\u672C", "Version"), t("\u6570\u91CF", "Board Qty"), t("\u5907\u6CE8", "Note")],
       ...sort(state.db.pcbs, (item) => {
-        var _a;
-        return `${((_a = pMap.get(item.projectId)) == null ? void 0 : _a.name) || ""}${item.name}${item.version}`;
+        var _a2;
+        return `${((_a2 = pMap.get(item.projectId)) == null ? void 0 : _a2.name) || ""}${item.name}${item.version}`;
       }).map((item) => {
-        var _a;
+        var _a2;
         return [
-          ((_a = pMap.get(item.projectId)) == null ? void 0 : _a.name) || "",
+          ((_a2 = pMap.get(item.projectId)) == null ? void 0 : _a2.name) || "",
           item.name,
           item.version || "",
           item.boardQuantity,
@@ -1025,13 +1084,13 @@
     const bomRows = [
       [t("\u9879\u76EE", "Project"), t("PCB", "PCB"), t("\u7248\u672C", "Version"), t("\u7C7B\u578B", "Type"), t("\u578B\u53F7", "Model"), t("\u5355\u677F\u9700\u6C42", "Qty per Board")],
       ...state.db.pcbs.flatMap((pcb) => pcb.items.map((bom) => {
-        var _a, _b;
+        var _a2, _b2;
         const c = state.db.components.find((it) => it.id === bom.componentId);
         return [
-          ((_a = pMap.get(pcb.projectId)) == null ? void 0 : _a.name) || "",
+          ((_a2 = pMap.get(pcb.projectId)) == null ? void 0 : _a2.name) || "",
           pcb.name,
           pcb.version || "",
-          c ? ((_b = tMap.get(c.typeId)) == null ? void 0 : _b.name) || "" : "",
+          c ? ((_b2 = tMap.get(c.typeId)) == null ? void 0 : _b2.name) || "" : "",
           c ? c.model : "",
           bom.quantityPerBoard
         ];

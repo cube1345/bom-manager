@@ -22,6 +22,7 @@ export async function openBomManager(): Promise<void> {
 	const envInfo = (() => {
 		try {
 			const env = eda.sys_Environment;
+			const iframe = (eda as any)?.sys_IFrame;
 			return {
 				isClient: env?.isClient?.() ?? undefined,
 				isWeb: env?.isWeb?.() ?? undefined,
@@ -30,6 +31,7 @@ export async function openBomManager(): Promise<void> {
 				isOfflineMode: env?.isOfflineMode?.() ?? undefined,
 				editorVersion: env?.getEditorCurrentVersion?.() ?? '',
 				compiledDate: env?.getEditorCompliedDate?.() ?? '',
+				openIFrameDeclaredParams: typeof iframe?.openIFrame === 'function' ? iframe.openIFrame.length : undefined,
 			};
 		} catch {
 			return {
@@ -40,6 +42,7 @@ export async function openBomManager(): Promise<void> {
 				isOfflineMode: undefined,
 				editorVersion: '',
 				compiledDate: '',
+				openIFrameDeclaredParams: undefined as number | undefined,
 			};
 		}
 	})();
@@ -106,45 +109,33 @@ export async function openBomManager(): Promise<void> {
 		} catch {}
 	};
 
-	const attempts: Array<{ label: string; run: () => Promise<boolean> }> = [
-		{
-			label: 'large/no-props (index.rel)',
-			run: async () => eda.sys_IFrame.openIFrame('/iframe/index.html', 1600, 980, BOM_IFRAME_ID),
-		},
-		{
-			label: 'large/no-props (index.abs)',
-			run: async () => eda.sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980, BOM_IFRAME_ID),
-		},
-		{
-			label: 'large/props (index.rel)',
-			run: async () =>
-				eda.sys_IFrame.openIFrame('/iframe/index.html', 1600, 980, BOM_IFRAME_ID, {
-					title: BOM_IFRAME_TITLE,
-					maximizeButton: true,
-					minimizeButton: true,
-					grayscaleMask: true,
-				}),
-		},
-		{
-			label: 'large/props (index.abs)',
-			run: async () =>
-				eda.sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980, BOM_IFRAME_ID, {
-					title: BOM_IFRAME_TITLE,
-					maximizeButton: true,
-					minimizeButton: true,
-					grayscaleMask: true,
-				}),
-		},
-		{
-			label: 'mid/no-props (index.rel)',
-			run: async () =>
-				eda.sys_IFrame.openIFrame('/iframe/index.html', 1200, 820, BOM_IFRAME_ID),
-		},
-		{
-			label: 'doc-example-500 (index.rel)',
-			run: async () => eda.sys_IFrame.openIFrame('/iframe/index.html', 500, 500, BOM_IFRAME_ID),
-		},
+	// Keep props minimal for compatibility (some 3.2.91 builds seem to 500 on richer props).
+	const props = { title: BOM_IFRAME_TITLE };
+
+	const openAny = async (...args: any[]): Promise<boolean> => (eda as any).sys_IFrame.openIFrame(...args);
+
+	const width = 1600;
+	const height = 980;
+	const htmlCandidates = ['/iframe/index.html', 'iframe/index.html', '/iframe/index.abs.html', 'iframe/index.abs.html'];
+
+	// Prefer patterns that include a stable id, so we can close/retry without leaving orphan windows.
+	const patterns: Array<{ label: string; makeArgs: (html: string) => any[] }> = [
+		{ label: '4-args id', makeArgs: (html) => [html, width, height, BOM_IFRAME_ID] },
+		{ label: '5-args id+props', makeArgs: (html) => [html, width, height, BOM_IFRAME_ID, props] },
+		// Fallbacks for possible older signatures:
+		{ label: '4-args props', makeArgs: (html) => [html, width, height, props] },
+		{ label: '3-args', makeArgs: (html) => [html, width, height] },
 	];
+
+	const attempts: Array<{ label: string; run: () => Promise<boolean> }> = [];
+	for (const html of htmlCandidates) {
+		for (const p of patterns) {
+			attempts.push({
+				label: `${p.label} ${html}`,
+				run: async () => openAny(...p.makeArgs(html)),
+			});
+		}
+	}
 
 	const isActuallyOpened = async (): Promise<boolean> => {
 		try {
@@ -224,8 +215,8 @@ export async function openBomManager(): Promise<void> {
 
 			// The openIFrame() boolean is not reliable on some client versions.
 			// We consider it "success" only when the iframe app actually boots.
-			const ready = waitForIframeReady(3500);
-			const storageBootedPromise = waitForIframeBootTs(requestTs, 3500);
+			const ready = waitForIframeReady(6000);
+			const storageBootedPromise = waitForIframeBootTs(requestTs, 6000);
 			const busBooted = await ready.promise;
 			const storageBooted = await storageBootedPromise;
 			ready.cancel();
@@ -279,15 +270,33 @@ export async function openBomManager(): Promise<void> {
 		}
 	}
 
+	const lastBoot = (() => {
+		try {
+			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot');
+		} catch {
+			return undefined;
+		}
+	})();
+	const lastErrorInfo = (() => {
+		try {
+			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-error');
+		} catch {
+			return undefined;
+		}
+	})();
+
 	eda.sys_Dialog.showInformationMessage(
 		`打开插件窗口失败（IFrame 应用未能完成启动）。\n\n` +
 			`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
 			`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
 			`版本：${envInfo.editorVersion || '未知'}\n` +
 			`编译日期：${envInfo.compiledDate || '未知'}\n` +
+			`openIFrame 参数个数（声明）：${String(envInfo.openIFrameDeclaredParams)}\n` +
 			`扩展资源：index(rel /)=${String(fileExists.indexSlash)} index(rel no/)=${String(fileExists.indexNoSlash)} index(abs /)=${String(fileExists.indexAbsSlash)} index(abs no/)=${String(fileExists.indexAbsNoSlash)}\n` +
 			`扩展资源：app.js=${String(fileExists.appJs)} styles.css=${String(fileExists.styles)}\n\n` +
 			`最后错误：${lastError instanceof Error ? lastError.message : String(lastError)}\n\n` +
+			`iframe lastBoot：${lastBoot ? JSON.stringify(lastBoot) : 'none'}\n` +
+			`iframe lastError：${lastErrorInfo ? JSON.stringify(lastErrorInfo) : 'none'}\n\n` +
 			`说明：本插件本质不需要联网。当前失败更像是 EDA 版本对 openIFrame 的限制/缺陷。\n` +
 			`建议：升级到更新版本的嘉立创 EDA 专业版后重试；或将这段信息发给我继续排查。`,
 		BOM_IFRAME_TITLE,
@@ -371,6 +380,21 @@ export async function selfCheck(): Promise<void> {
 		return Object.fromEntries(results) as Record<(typeof targets)[number], string>;
 	})();
 
+	const lastBoot = (() => {
+		try {
+			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot');
+		} catch {
+			return undefined;
+		}
+	})();
+	const lastErrorInfo = (() => {
+		try {
+			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-error');
+		} catch {
+			return undefined;
+		}
+	})();
+
 	const lines: string[] = [];
 	lines.push(`[物料管理助手 SelfCheck] v${extensionConfig.version}`);
 	lines.push(`env: isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}`);
@@ -382,6 +406,9 @@ export async function selfCheck(): Promise<void> {
 	for (const [k, v] of Object.entries(apiInfo)) lines.push(`  - ${k}: ${v}`);
 	lines.push('resources:');
 	for (const [k, v] of Object.entries(fileChecks)) lines.push(`  - ${k}: ${v}`);
+	lines.push('iframe:');
+	lines.push(`  - lastBoot: ${lastBoot ? JSON.stringify(lastBoot) : 'none'}`);
+	lines.push(`  - lastError: ${lastErrorInfo ? JSON.stringify(lastErrorInfo) : 'none'}`);
 
 	const report = lines.join('\n');
 	try {

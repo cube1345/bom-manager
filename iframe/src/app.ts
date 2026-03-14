@@ -18,15 +18,83 @@
 	}
 
 	try {
+		const now = Date.now();
+
+		// Capture runtime errors for offline debugging. These are written into extension user config,
+		// so the entry script can show them when openIFrame fails/blank.
+		const writeLastError = (payload) => {
+			try {
+				if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
+					void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-error', payload);
+				}
+			} catch (_e) {}
+		};
+
+		window.addEventListener('error', (event) => {
+			try {
+				const err = event && event.error instanceof Error ? event.error : null;
+				writeLastError({
+					ts: Date.now(),
+					type: 'error',
+					message: String(event?.message || err?.message || 'unknown'),
+					filename: String(event?.filename || ''),
+					lineno: Number(event?.lineno || 0),
+					colno: Number(event?.colno || 0),
+					stack: err?.stack ? String(err.stack) : '',
+				});
+			} catch (_e) {}
+		});
+
+		window.addEventListener('unhandledrejection', (event) => {
+			try {
+				const reason = event && event.reason ? event.reason : null;
+				const msg =
+					reason instanceof Error
+						? `${reason.name}: ${reason.message}`
+						: typeof reason === 'string'
+							? reason
+							: reason
+								? (() => {
+										try {
+											return JSON.stringify(reason);
+										} catch (_e) {
+											return String(reason);
+										}
+									})()
+								: 'unknown';
+				writeLastError({
+					ts: Date.now(),
+					type: 'unhandledrejection',
+					message: msg,
+					stack: reason instanceof Error && reason.stack ? String(reason.stack) : '',
+				});
+			} catch (_e) {}
+		});
+
 		// Notify the extension entry that the iframe app has booted.
 		// Storage is more reliable than MessageBus across some client builds.
 		if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
-			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot-ts', Date.now());
+			const bootInfo = {
+				ts: now,
+				href: String(location?.href || ''),
+				baseURI: String(document?.baseURI || ''),
+				userAgent: String(navigator?.userAgent || ''),
+			};
+			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot-ts', now);
+			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot', bootInfo);
 		}
 
 		if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === 'function') {
-			edaApi.sys_MessageBus.publish('bom-manager-ready', { ts: Date.now() });
+			edaApi.sys_MessageBus.publish('bom-manager-ready', { ts: now });
 		}
+
+		// Also log boot info when possible (helps when users only have log panel).
+		try {
+			edaApi.sys_Log?.add?.(
+				`[bom-manager iframe] boot ok ts=${now} baseURI=${String(document?.baseURI || '')}`,
+				'info',
+			);
+		} catch (_e) {}
 	} catch (_error) {}
 
 	const state = {
