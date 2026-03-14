@@ -22,7 +22,6 @@ export async function openBomManager(): Promise<void> {
 	const envInfo = (() => {
 		try {
 			const env = eda.sys_Environment;
-			const iframe = (eda as any)?.sys_IFrame;
 			return {
 				isClient: env?.isClient?.() ?? undefined,
 				isWeb: env?.isWeb?.() ?? undefined,
@@ -31,7 +30,6 @@ export async function openBomManager(): Promise<void> {
 				isOfflineMode: env?.isOfflineMode?.() ?? undefined,
 				editorVersion: env?.getEditorCurrentVersion?.() ?? '',
 				compiledDate: env?.getEditorCompliedDate?.() ?? '',
-				openIFrameDeclaredParams: typeof iframe?.openIFrame === 'function' ? iframe.openIFrame.length : undefined,
 			};
 		} catch {
 			return {
@@ -42,7 +40,6 @@ export async function openBomManager(): Promise<void> {
 				isOfflineMode: undefined,
 				editorVersion: '',
 				compiledDate: '',
-				openIFrameDeclaredParams: undefined as number | undefined,
 			};
 		}
 	})();
@@ -55,227 +52,50 @@ export async function openBomManager(): Promise<void> {
 				`版本：${envInfo.editorVersion || '未知'}\n` +
 				`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
 				`请升级嘉立创 EDA 专业版后重试。`,
-			'物料管理助手',
+			BOM_IFRAME_TITLE,
 		);
 		return;
 	}
-
-	// NOTE: we intentionally avoid calling getExtensionFile() during normal open path,
-	// because IndexedDB-backed resource reads can be slow on some clients.
-
-	const closeIfExists = async () => {
-		try {
-			if (typeof (eda as any)?.sys_IFrame?.closeIFrame === 'function') {
-				await (eda as any).sys_IFrame.closeIFrame(BOM_IFRAME_ID);
-			}
-		} catch {}
-	};
-
-	// Keep the open sequence fast and compatible with older clients:
-	// some builds treat the 4th arg as "props" (not "id"), so we try 3-args first.
-	const props = {
-		title: BOM_IFRAME_TITLE,
-		maximizeButton: true,
-		minimizeButton: true,
-		grayscaleMask: true,
-	};
-
-	const openAny = async (...args: any[]): Promise<boolean> => (eda as any).sys_IFrame.openIFrame(...args);
-
-	const addAttempts = (html: string, width: number, height: number) => {
-		const htmlVariants = [html, html.startsWith('/') ? html.slice(1) : `/${html}`];
-		const unique = Array.from(new Set(htmlVariants));
-		const out: Array<{ label: string; run: () => Promise<boolean> }> = [];
-		for (const h of unique) {
-			// Prefer a stable id so we can verify "opened" quickly on buggy builds.
-			out.push({ label: `5-args id+props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID, props) });
-			// Some builds accept an id as 4th arg.
-			out.push({ label: `4-args id ${h} ${width}x${height}`, run: async () => openAny(h, width, height, BOM_IFRAME_ID) });
-			// Some builds accept props as 4th arg (older signature).
-			out.push({ label: `4-args props ${h} ${width}x${height}`, run: async () => openAny(h, width, height, props) });
-			// 3-args is the most compatible signature across client builds, but may not be closable by id.
-			out.push({ label: `3-args ${h} ${width}x${height}`, run: async () => openAny(h, width, height) });
-		}
-		return out;
-	};
-
-	const attempts: Array<{ label: string; run: () => Promise<boolean> }> = [
-		...addAttempts('/iframe/index.html', 1600, 980),
-		...addAttempts('/iframe/index.abs.html', 1600, 980),
-	];
 
 	const isActuallyOpened = async (): Promise<boolean> => {
 		try {
 			if (typeof (eda as any)?.sys_IFrame?.hideIFrame !== 'function' || typeof (eda as any)?.sys_IFrame?.showIFrame !== 'function') {
 				return false;
 			}
-			const hidden = await eda.sys_IFrame.hideIFrame(BOM_IFRAME_ID);
-			if (!hidden) {
-				return false;
-			}
-			await eda.sys_IFrame.showIFrame(BOM_IFRAME_ID);
+			const hidden = await (eda as any).sys_IFrame.hideIFrame(BOM_IFRAME_ID);
+			if (!hidden) return false;
+			await (eda as any).sys_IFrame.showIFrame(BOM_IFRAME_ID);
 			return true;
 		} catch {
 			return false;
 		}
 	};
 
-	const waitForIframeBootTs = async (minTs: number, msTimeout: number) => {
-		const start = Date.now();
-		while (Date.now() - start < msTimeout) {
-			try {
-				const value = (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot-ts');
-				const ts = typeof value === 'number' ? value : typeof value?.ts === 'number' ? value.ts : 0;
-				if (ts && ts >= minTs) {
-					return true;
-				}
-			} catch {}
-			await new Promise((r) => setTimeout(r, 120));
+	// Match the stable behavior of earlier builds: keep attempts few and avoid slow resource checks.
+	// In some clients openIFrame() returns false even when the dialog was created.
+	const tryOpen = async (html: string): Promise<boolean> => {
+		try {
+			const ok = await (eda as any).sys_IFrame.openIFrame(html, 1600, 980, BOM_IFRAME_ID);
+			if (ok) return true;
+			if (await isActuallyOpened()) return true;
+			return false;
+		} catch {
+			if (await isActuallyOpened()) return true;
+			return false;
 		}
-		return false;
 	};
 
-	let lastError: unknown = null;
-	for (const attempt of attempts) {
-		let requestTs = 0;
-		try {
-			await closeIfExists();
-			requestTs = Date.now();
-			try {
-				await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
-			} catch {}
-
-			const ok = await attempt.run();
-
-			// openIFrame() boolean is not reliable on some client versions.
-			// If the dialog is actually opened (by id), return immediately for speed.
-			const opened = Boolean(ok) || (ok === false && (await isActuallyOpened()));
-			if (opened) {
-				try {
-					eda.sys_Log?.add?.(
-						`openBomManager ok via ${attempt.label} (ok=${String(ok)} opened=${String(opened)})`,
-						'info' as any,
-					);
-				} catch {}
-				return;
-			}
-
-			// As a fallback (e.g. 3-args open without id), wait briefly for the iframe boot receipt.
-			const storageBooted = await waitForIframeBootTs(requestTs, 1200);
-			if (storageBooted) {
-				try {
-					eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (ok=${String(ok)} storageBooted=true)`, 'info' as any);
-				} catch {}
-				return;
-			}
-
-			// If the window was created but the app didn't boot (e.g. 404 / script load failure),
-			// close it to avoid leaving a blank window before the next attempt.
-			try {
-				if (await isActuallyOpened()) {
-					await closeIfExists();
-				}
-			} catch {}
-
-			lastError = new Error(`openIFrame did not boot (${attempt.label}, ok=${String(ok)})`);
-			try {
-				eda.sys_Log?.add?.(
-					`openBomManager failed: iframe did not boot (${attempt.label}, ok=${String(ok)} storageBooted=${String(storageBooted)})`,
-					'warn' as any,
-				);
-			} catch {}
-		} catch (error) {
-			lastError = error;
-			try {
-				// Even if openIFrame threw, the dialog might still have been created.
-				if (await isActuallyOpened()) {
-					try {
-						eda.sys_Log?.add?.(`openBomManager ok via ${attempt.label} (threw but opened)`, 'warn' as any);
-					} catch {}
-					return;
-				}
-			} catch {}
-			try {
-				eda.sys_Log?.add?.(
-					`openBomManager failed (${attempt.label}): ${
-						error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-					}`,
-					'error' as any,
-				);
-			} catch {}
-		}
-	}
-
-	const lastBoot = (() => {
-		try {
-			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot');
-		} catch {
-			return undefined;
-		}
-	})();
-	const lastErrorInfo = (() => {
-		try {
-			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-error');
-		} catch {
-			return undefined;
-		}
-	})();
-
-	const fileExists = await (async () => {
-		try {
-			const fsApi = (eda as any)?.sys_FileSystem;
-			if (!fsApi || typeof fsApi.getExtensionFile !== 'function') {
-				return {
-					indexSlash: undefined as boolean | undefined,
-					indexNoSlash: undefined as boolean | undefined,
-					indexAbsSlash: undefined as boolean | undefined,
-					indexAbsNoSlash: undefined as boolean | undefined,
-					appJs: undefined as boolean | undefined,
-					styles: undefined as boolean | undefined,
-				};
-			}
-			const [a, b, a2, b2, js, css] = await Promise.all([
-				fsApi.getExtensionFile('/iframe/index.html').catch(() => undefined),
-				fsApi.getExtensionFile('iframe/index.html').catch(() => undefined),
-				fsApi.getExtensionFile('/iframe/index.abs.html').catch(() => undefined),
-				fsApi.getExtensionFile('iframe/index.abs.html').catch(() => undefined),
-				fsApi.getExtensionFile('/iframe/app.js').catch(() => undefined),
-				fsApi.getExtensionFile('/iframe/styles.css').catch(() => undefined),
-			]);
-			return {
-				indexSlash: Boolean(a),
-				indexNoSlash: Boolean(b),
-				indexAbsSlash: Boolean(a2),
-				indexAbsNoSlash: Boolean(b2),
-				appJs: Boolean(js),
-				styles: Boolean(css),
-			};
-		} catch {
-			return {
-				indexSlash: undefined as boolean | undefined,
-				indexNoSlash: undefined as boolean | undefined,
-				indexAbsSlash: undefined as boolean | undefined,
-				indexAbsNoSlash: undefined as boolean | undefined,
-				appJs: undefined as boolean | undefined,
-				styles: undefined as boolean | undefined,
-			};
-		}
-	})();
+	// Prefer relative-path index first, then absolute variant.
+	if (await tryOpen('/iframe/index.html')) return;
+	if (await tryOpen('/iframe/index.abs.html')) return;
 
 	eda.sys_Dialog.showInformationMessage(
-		`打开插件窗口失败（IFrame 应用未能完成启动）。\n\n` +
+		`打开插件窗口失败。\n\n` +
 			`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
 			`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
 			`版本：${envInfo.editorVersion || '未知'}\n` +
-			`编译日期：${envInfo.compiledDate || '未知'}\n` +
-			`openIFrame 参数个数（声明）：${String(envInfo.openIFrameDeclaredParams)}\n` +
-			`扩展资源：index(rel /)=${String(fileExists.indexSlash)} index(rel no/)=${String(fileExists.indexNoSlash)} index(abs /)=${String(fileExists.indexAbsSlash)} index(abs no/)=${String(fileExists.indexAbsNoSlash)}\n` +
-			`扩展资源：app.js=${String(fileExists.appJs)} styles.css=${String(fileExists.styles)}\n\n` +
-			`最后错误：${lastError instanceof Error ? lastError.message : String(lastError)}\n\n` +
-			`iframe lastBoot：${lastBoot ? JSON.stringify(lastBoot) : 'none'}\n` +
-			`iframe lastError：${lastErrorInfo ? JSON.stringify(lastErrorInfo) : 'none'}\n\n` +
-			`说明：本插件本质不需要联网。当前失败更像是 EDA 版本对 openIFrame 的限制/缺陷。\n` +
-			`建议：升级到更新版本的嘉立创 EDA 专业版后重试；或将这段信息发给我继续排查。`,
+			`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
+			`建议：请先使用“环境自检”确认资源可读；若仍失败，建议升级 EDA 后重试。`,
 		BOM_IFRAME_TITLE,
 	);
 }
