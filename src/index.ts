@@ -57,74 +57,31 @@ export async function openBomManager(): Promise<void> {
 		return;
 	}
 
-	// In some clients openIFrame() returns false even when the dialog was created.
-	// Boot receipt in sys_Storage is the most reliable signal for "rendered".
-	const waitForIframeBootTs = async (minTs: number, msTimeout: number) => {
-		const start = Date.now();
-		while (Date.now() - start < msTimeout) {
-			try {
-				const value = (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot-ts');
-				const ts = typeof value === 'number' ? value : typeof value?.ts === 'number' ? value.ts : 0;
-				if (ts && ts >= minTs) return true;
-			} catch {}
-			await new Promise((r) => setTimeout(r, 120));
-		}
-		return false;
-	};
-
-	// Avoid opening multiple windows: only open the default page once.
-	// If it still doesn't render after a while, ask the user before trying the compat page.
+	// Your client (3.2.91) can open the compat page reliably, while the default page may fail to render.
+	// So we only open the compat page by default to avoid duplicate windows and blank renders.
 	const requestTs = Date.now();
 	try {
 		await (eda as any)?.sys_Storage?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
 	} catch {}
 
-	let ok = false;
 	try {
-		ok = (await (eda as any).sys_IFrame.openIFrame('/iframe/index.html', 1600, 980)) === true;
-	} catch {}
-	if (ok) return;
-
-	// If openIFrame returned false, give it more time to boot (some clients are slow) without opening another window.
-	// This prevents the "one click opens two windows" issue.
-	setTimeout(() => {
-		void (async () => {
-			try {
-				const booted = await waitForIframeBootTs(requestTs, 6000);
-				if (booted) return;
-
-				eda.sys_Dialog.showConfirmationMessage(
-					`插件窗口可能已打开但未能渲染完成。\n\n` +
-						`是否改用兼容页面打开？（可能会再打开一个窗口）\n\n` +
-						`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
-						`版本：${envInfo.editorVersion || '未知'}\n` +
-						`编译日期：${envInfo.compiledDate || '未知'}`,
-					BOM_IFRAME_TITLE,
-					'使用兼容页面',
-					'取消',
-					(mainClicked: boolean) => {
-						if (!mainClicked) return;
-						try {
-							void (eda as any).sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980);
-						} catch {}
-					},
-				);
-			} catch {}
-		})();
-	}, 1);
+		// NOTE: some builds return false even when the window opens. We don't treat false as failure.
+		void (eda as any).sys_IFrame.openIFrame('/iframe/index.abs.html', 1600, 980);
+	} catch (error) {
+		eda.sys_Dialog.showInformationMessage(
+			`打开插件窗口失败。\n\n` +
+				`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
+				`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
+				`版本：${envInfo.editorVersion || '未知'}\n` +
+				`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
+				`错误：${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}\n\n` +
+				`建议：请先使用“环境自检”确认资源可读；若仍失败，建议升级 EDA 后重试。`,
+			BOM_IFRAME_TITLE,
+		);
+	}
 
 	// Return immediately so opening stays fast.
 	return;
-
-	eda.sys_Dialog.showInformationMessage(
-		`打开插件窗口失败。\n\n` +
-			`环境：isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}\n` +
-			`模式：online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}\n` +
-			`版本：${envInfo.editorVersion || '未知'}\n` +
-			`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
-			`建议：请先使用“环境自检”确认资源可读；若仍失败，建议升级 EDA 后重试。`,
-		BOM_IFRAME_TITLE,
-	);
 }
 
 export async function selfCheck(): Promise<void> {
