@@ -8,14 +8,6 @@
 /src/
 /iframe/src/
 /.edaignore
-
-# Docs (not required at runtime)
-/CHANGELOG.md
-/README*.md
-
-# Demo assets (keep logo/banner png, exclude large gifs)
-/images/*.gif
-/images/*.GIF
 /.editorconfig
 /.eslintcache
 /.eslintrc.js
