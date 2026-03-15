@@ -804,6 +804,7 @@
 		render();
 	}
 	async function clearReportHistory() {
+		if (!window.confirm(t('确认清空全部报告历史？', 'Clear all report history?'))) return;
 		state.reportHistory = [];
 		await saveReportHistory();
 		setStatus('success', t('报告历史已清空。', 'Report history cleared.'));
