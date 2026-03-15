@@ -335,7 +335,7 @@ export async function selfCheck(): Promise<void> {
 	} catch {}
 
 	eda.sys_Dialog.showInformationMessage(
-		`${report}\n\n说明：\n- resources=missing 通常表示打包时未包含该文件（或路径解析不兼容）。\n- 若 openIFrame=yes 但仍无法渲染，多数是宿主版本兼容性问题，建议升级 EDA 后再测。`,
+		`${report}\n\n说明：\n- resources=missing 通常表示打包时未包含该文件（或路径解析不兼容）。\n- 若 getCurrentRenderedAreaImage / zoomToSelectedPrimitives / generateIndicatorMarkers 缺失，则画布截图与框选能力会受限。\n- 若 pcbGetGerberFile / pcbGetPickAndPlaceFile / pcbGet3DFile 缺失，则制造导出中心会按可用接口降级。\n- 若 openIFrame=yes 但仍无法渲染，多数是宿主版本兼容性问题，建议升级 EDA 后再测。`,
 		'环境自检',
 	);
 }
