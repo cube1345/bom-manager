@@ -623,7 +623,7 @@
 			[t('文件名', 'File Name'), report?.fileName || '-'],
 			[t('备注', 'Notes'), report?.notes || '-'],
 		];
-		return `<!doctype html><html><head><meta charset="utf-8" /><title>${e(report?.title || 'Design Pulse Record')}</title><style>body{font-family:"Segoe UI","Microsoft YaHei",sans-serif;padding:24px;color:#182334}h1{margin:0 0 8px}p{color:#5b6b84}table{border-collapse:collapse;width:100%;margin-top:18px}th,td{border:1px solid #dbe3f0;padding:8px 10px;text-align:left}th{width:220px;background:#f5f8ff}pre{margin-top:18px;padding:14px;background:#f6f8fb;border:1px solid #dbe3f0;border-radius:12px;white-space:pre-wrap;word-break:break-word}</style></head><body><h1>${e(report?.title || 'Design Pulse Record')}</h1><p>${e(`${reportKindText(report?.kind)} · ${time(report?.createdAt)}`)}</p><table>${rows.map((row) => `<tr><th>${e(row[0])}</th><td>${e(row[1])}</td></tr>`).join('')}</table><pre>${e(JSON.stringify(report, null, 2))}</pre></body></html>`;
+		return `<!doctype html><html><head><meta charset="utf-8" /><title>${e(report?.title || 'Material Manager Record')}</title><style>body{font-family:"Segoe UI","Microsoft YaHei",sans-serif;padding:24px;color:#182334}h1{margin:0 0 8px}p{color:#5b6b84}table{border-collapse:collapse;width:100%;margin-top:18px}th,td{border:1px solid #dbe3f0;padding:8px 10px;text-align:left}th{width:220px;background:#f5f8ff}pre{margin-top:18px;padding:14px;background:#f6f8fb;border:1px solid #dbe3f0;border-radius:12px;white-space:pre-wrap;word-break:break-word}</style></head><body><h1>${e(report?.title || 'Material Manager Record')}</h1><p>${e(`${reportKindText(report?.kind)} · ${time(report?.createdAt)}`)}</p><table>${rows.map((row) => `<tr><th>${e(row[0])}</th><td>${e(row[1])}</td></tr>`).join('')}</table><pre>${e(JSON.stringify(report, null, 2))}</pre></body></html>`;
 	}
 	async function saveBlobFile(fileData, fileName) {
 		await edaApi.sys_FileSystem.saveFile(fileData, fileName);
@@ -869,7 +869,7 @@
 		]
 			.filter(Boolean)
 			.join('');
-		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('工程脉搏', 'Design Pulse'))}</h1><p class="hero-copy">${e(t('围绕当前工程上下文、制造导出、画布截图与 BOM 协作，统一处理嘉立创 EDA 常用工程动作。', 'A focused JLCEDA Pro tool for design context, manufacture exports, canvas capture, and BOM workflows.'))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
+		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'Material Manager'))}</h1><p class="hero-copy">${e(t('围绕物料管理、当前工程上下文、制造导出、画布截图与 BOM 协作，统一处理嘉立创 EDA 常用工程动作。', 'A focused JLCEDA Pro tool for material management, design context, manufacture exports, canvas capture, and BOM workflows.'))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
 	}
 	function nav() {
 		const items = [

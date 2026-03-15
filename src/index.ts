@@ -13,7 +13,7 @@
 import * as extensionConfig from '../extension.json';
 
 const DESIGN_PULSE_IFRAME_ID = 'design-pulse-main';
-const DESIGN_PULSE_IFRAME_TITLE = '工程脉搏';
+const DESIGN_PULSE_IFRAME_TITLE = '物料管理助手';
 const DESIGN_PULSE_IFRAME_STATE_KEY = 'design-pulse-window-state';
 const LEGACY_IFRAME_STATE_KEY = 'bom-manager-window-state';
 const DESIGN_PULSE_IFRAME_SIZE_HINT_KEY = 'design-pulse-window-size-hint';
@@ -315,7 +315,7 @@ export async function selfCheck(): Promise<void> {
 	})();
 
 	const lines: string[] = [];
-	lines.push(`[工程脉搏 SelfCheck] v${extensionConfig.version}`);
+	lines.push(`[物料管理助手 SelfCheck] v${extensionConfig.version}`);
 	lines.push(`env: isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}`);
 	lines.push(
 		`mode: online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}`,
@@ -342,7 +342,7 @@ export async function selfCheck(): Promise<void> {
 
 export function about(): void {
 	eda.sys_Dialog.showInformationMessage(
-		`工程脉搏 v${extensionConfig.version}\n\n面向嘉立创 EDA 的工程快照、制造导出、画布快照与 BOM 协作助手。\n\n核心能力：\n- 当前工程/文档/团队/工作区快照\n- BOM / Gerber / Pick&Place / 3D / Netlist / Test Point 导出\n- 画布适应、框选与截图历史留档`,
-		'关于工程脉搏',
+		`物料管理助手 v${extensionConfig.version}\n\n面向嘉立创 EDA 的物料管理、工程快照、制造导出、画布快照与 BOM 协作工具。\n\n核心能力：\n- 当前工程/文档/团队/工作区快照\n- BOM / Gerber / Pick&Place / 3D / Netlist / Test Point 导出\n- 画布适应、框选与截图历史留档`,
+		'关于物料管理助手',
 	);
 }
