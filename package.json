@@ -1,6 +1,6 @@
 {
 	"name": "design-pulse",
-	"version": "1.1.19",
+	"version": "1.1.18",
 	"description": "嘉立创 EDA 专业版物料管理、工程快照、制造导出与 BOM 协作工具",
 	"author": "JLCEDA <support@lceda.cn>",
 	"license": "Apache-2.0",
@@ -43,7 +43,6 @@
 		"node": ">=20.5.0"
 	}
 }
-
 
 
 

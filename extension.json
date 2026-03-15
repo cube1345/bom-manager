@@ -3,7 +3,7 @@
 	"uuid": "9444a4f933fc4431be2afd2298d20082",
 	"displayName": "物料管理助手",
 	"description": "面向嘉立创 EDA 专业版的物料管理、工程快照、制造导出与 BOM 协作工具",
-	"version": "1.1.19",
+	"version": "1.1.18",
 	"publisher": "cube",
 	"engines": {
 		"eda": "^2.3.0"
@@ -95,7 +95,6 @@
 		]
 	}
 }
-
 
 
 
