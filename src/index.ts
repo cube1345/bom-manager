@@ -342,7 +342,7 @@ export async function selfCheck(): Promise<void> {
 
 export function about(): void {
 	eda.sys_Dialog.showInformationMessage(
-		`工程脉搏 v${extensionConfig.version}\n\n面向嘉立创 EDA 的工程快照、制造导出、画布快照与 BOM 协作助手。`,
+		`工程脉搏 v${extensionConfig.version}\n\n面向嘉立创 EDA 的工程快照、制造导出、画布快照与 BOM 协作助手。\n\n核心能力：\n- 当前工程/文档/团队/工作区快照\n- BOM / Gerber / Pick&Place / 3D / Netlist / Test Point 导出\n- 画布适应、框选与截图历史留档`,
 		'关于工程脉搏',
 	);
 }
