@@ -39,3 +39,13 @@
 - 迭代发版脚本：`scripts/release-iteration.ps1`
 
 构建产物会输出到 `dist/` 和 `build/dist/`。其中 `build/dist/*.eext` 会被保留用于版本回溯。
+
+## 迭代发版
+
+使用下面的方式滚动一个新版本：
+
+```powershell
+.\scripts\release-iteration.ps1 -Version 0.1.6 -CommitMessage "feat: ..." -Changes @("变更 1", "变更 2")
+```
+
+脚本会自动更新 `package.json`、`extension.json`、`CHANGELOG.md`，随后构建 `.eext` 并完成一次 git 提交。
