@@ -3,10 +3,22 @@
   var _a, _b;
   const app = document.getElementById("app");
   const edaApi = window.eda || window.parent && window.parent.eda || window.top && window.top.eda;
-  const DB_KEY = "bom-manager-db";
-  const PREFS_KEY = "bom-manager-prefs";
-  const WINDOW_STATE_KEY = "bom-manager-window-state";
-  const WINDOW_SIZE_HINT_KEY = "bom-manager-window-size-hint";
+  const DB_KEY = "design-pulse-db";
+  const LEGACY_DB_KEY = "bom-manager-db";
+  const PREFS_KEY = "design-pulse-prefs";
+  const LEGACY_PREFS_KEY = "bom-manager-prefs";
+  const REPORT_HISTORY_KEY = "design-pulse-report-history";
+  const EXPORT_PREFS_KEY = "design-pulse-export-prefs";
+  const WINDOW_STATE_KEY = "design-pulse-window-state";
+  const LEGACY_WINDOW_STATE_KEY = "bom-manager-window-state";
+  const WINDOW_SIZE_HINT_KEY = "design-pulse-window-size-hint";
+  const LEGACY_WINDOW_SIZE_HINT_KEY = "bom-manager-window-size-hint";
+  const LAST_ERROR_KEY = "design-pulse-last-error";
+  const LEGACY_LAST_ERROR_KEY = "bom-manager-last-error";
+  const LAST_BOOT_KEY = "design-pulse-last-boot";
+  const LEGACY_LAST_BOOT_KEY = "bom-manager-last-boot";
+  const LAST_BOOT_TS_KEY = "design-pulse-last-boot-ts";
+  const LEGACY_LAST_BOOT_TS_KEY = "bom-manager-last-boot-ts";
   if (!app) return;
   if (!edaApi) {
     app.innerHTML = '<div class="fatal-state">\u672A\u68C0\u6D4B\u5230\u5609\u7ACB\u521B\u63D2\u4EF6\u8FD0\u884C\u73AF\u5883\uFF08IFrame \u5185\u672A\u6CE8\u5165 eda API\uFF09\u3002</div>';
@@ -38,7 +50,7 @@
     const writeLastError = (payload) => {
       try {
         if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === "function") {
-          void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-error", payload);
+          void edaApi.sys_Storage.setExtensionUserConfig(LAST_ERROR_KEY, payload);
         }
       } catch (_e) {
       }
@@ -86,18 +98,18 @@
         viewportWidth: Math.max(0, Math.round(window.innerWidth || 0)),
         viewportHeight: Math.max(0, Math.round(window.innerHeight || 0))
       };
-      void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot-ts", now);
-      void edaApi.sys_Storage.setExtensionUserConfig("bom-manager-last-boot", bootInfo);
+      void edaApi.sys_Storage.setExtensionUserConfig(LAST_BOOT_TS_KEY, now);
+      void edaApi.sys_Storage.setExtensionUserConfig(LAST_BOOT_KEY, bootInfo);
       void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, "normal");
       persistWindowSizeHint();
     }
     if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === "function") {
-      edaApi.sys_MessageBus.publish("bom-manager-ready", { ts: now });
+      edaApi.sys_MessageBus.publish("design-pulse-ready", { ts: now });
     }
     try {
       (_b = (_a = edaApi.sys_Log) == null ? void 0 : _a.add) == null ? void 0 : _b.call(
         _a,
-        `[bom-manager iframe] boot ok ts=${now} baseURI=${String((document == null ? void 0 : document.baseURI) || "")}`,
+        `[design-pulse iframe] boot ok ts=${now} baseURI=${String((document == null ? void 0 : document.baseURI) || "")}`,
         "info"
       );
     } catch (_e) {
@@ -123,7 +135,9 @@
     status: "",
     statusKind: "info",
     prefs: loadPrefs(),
+    exportPrefs: loadExportPrefs(),
     db: loadDb(),
+    reportHistory: loadReportHistory(),
     componentFilter: { keyword: "", typeId: "all", warningOnly: false },
     projectFilter: "all",
     purchase: {
@@ -147,6 +161,18 @@
   }
   function iso() {
     return (/* @__PURE__ */ new Date()).toISOString();
+  }
+  function loadUserConfig(primaryKey, legacyKey, fallbackValue) {
+    try {
+      const primary = edaApi.sys_Storage.getExtensionUserConfig(primaryKey);
+      if (typeof primary !== "undefined" && primary !== null) return primary;
+      if (legacyKey) {
+        const legacy = edaApi.sys_Storage.getExtensionUserConfig(legacyKey);
+        if (typeof legacy !== "undefined" && legacy !== null) return legacy;
+      }
+    } catch (_error) {
+    }
+    return fallbackValue;
   }
   function t(zh, en) {
     return state.prefs.lang === "en" ? en : zh;
@@ -294,7 +320,21 @@
       enableOpenSourcePcb: true,
       enablePurchaseView: true,
       enableStoresView: true,
+      enableReportsView: true,
+      enableExportHub: true,
+      enableCanvasTools: true,
       autoLoadEdaSnapshot: false
+    };
+  }
+  function defaultExportPrefs() {
+    return {
+      bomFileType: "xlsx",
+      pickPlaceFileType: "xlsx",
+      modelFileType: "step",
+      modelMode: "Outfit",
+      gerberColorSilkscreen: false,
+      autoGenerateModels: true,
+      reportHistoryLimit: 8
     };
   }
   function normalizePrefs(input) {
@@ -311,26 +351,78 @@
       features
     };
   }
+  function normalizeExportPrefs(input) {
+    const raw = input && typeof input === "object" ? input : {};
+    const defaults = defaultExportPrefs();
+    return {
+      bomFileType: (raw == null ? void 0 : raw.bomFileType) === "csv" ? "csv" : defaults.bomFileType,
+      pickPlaceFileType: (raw == null ? void 0 : raw.pickPlaceFileType) === "csv" ? "csv" : defaults.pickPlaceFileType,
+      modelFileType: (raw == null ? void 0 : raw.modelFileType) === "obj" ? "obj" : defaults.modelFileType,
+      modelMode: (raw == null ? void 0 : raw.modelMode) === "Parts" ? "Parts" : defaults.modelMode,
+      gerberColorSilkscreen: typeof (raw == null ? void 0 : raw.gerberColorSilkscreen) === "boolean" ? raw.gerberColorSilkscreen : defaults.gerberColorSilkscreen,
+      autoGenerateModels: typeof (raw == null ? void 0 : raw.autoGenerateModels) === "boolean" ? raw.autoGenerateModels : defaults.autoGenerateModels,
+      reportHistoryLimit: Number.isFinite(Number(raw == null ? void 0 : raw.reportHistoryLimit)) ? Math.max(3, Math.min(20, Number(raw.reportHistoryLimit))) : defaults.reportHistoryLimit
+    };
+  }
+  function normalizeReportHistory(input) {
+    return Array.isArray(input) ? input.filter((item) => item && typeof item === "object") : [];
+  }
   function loadPrefs() {
     try {
-      return normalizePrefs(edaApi.sys_Storage.getExtensionUserConfig(PREFS_KEY));
+      return normalizePrefs(loadUserConfig(PREFS_KEY, LEGACY_PREFS_KEY));
     } catch (_error) {
       return normalizePrefs();
     }
   }
+  function loadExportPrefs() {
+    try {
+      return normalizeExportPrefs(loadUserConfig(EXPORT_PREFS_KEY, null));
+    } catch (_error) {
+      return normalizeExportPrefs();
+    }
+  }
   function loadDb() {
     try {
-      return nDb(edaApi.sys_Storage.getExtensionUserConfig(DB_KEY) || defaultDb());
+      return nDb(loadUserConfig(DB_KEY, LEGACY_DB_KEY, defaultDb()) || defaultDb());
     } catch (_error) {
       return defaultDb();
+    }
+  }
+  function loadReportHistory() {
+    try {
+      return normalizeReportHistory(loadUserConfig(REPORT_HISTORY_KEY, null, []));
+    } catch (_error) {
+      return [];
     }
   }
   async function savePrefs() {
     await edaApi.sys_Storage.setExtensionUserConfig(PREFS_KEY, state.prefs);
   }
+  async function saveExportPrefs() {
+    state.exportPrefs = normalizeExportPrefs(state.exportPrefs);
+    await edaApi.sys_Storage.setExtensionUserConfig(EXPORT_PREFS_KEY, state.exportPrefs);
+  }
   async function saveDb() {
     state.db = nDb(state.db);
     await edaApi.sys_Storage.setExtensionUserConfig(DB_KEY, state.db);
+  }
+  async function saveReportHistory() {
+    var _a2;
+    const limit = Number(((_a2 = state.exportPrefs) == null ? void 0 : _a2.reportHistoryLimit) || defaultExportPrefs().reportHistoryLimit);
+    state.reportHistory = normalizeReportHistory(state.reportHistory).slice(0, limit);
+    await edaApi.sys_Storage.setExtensionUserConfig(REPORT_HISTORY_KEY, state.reportHistory);
+  }
+  async function pushReport(entry) {
+    var _a2;
+    state.reportHistory = [
+      {
+        id: entry.id || id(),
+        createdAt: entry.createdAt || iso(),
+        ...entry
+      },
+      ...normalizeReportHistory(state.reportHistory)
+    ].slice(0, Number(((_a2 = state.exportPrefs) == null ? void 0 : _a2.reportHistoryLimit) || defaultExportPrefs().reportHistoryLimit));
+    await saveReportHistory();
   }
   function projectDisplayNameFromSnapshot(snapshot) {
     return String((snapshot == null ? void 0 : snapshot.projectFriendlyName) || (snapshot == null ? void 0 : snapshot.projectName) || "").trim();
@@ -346,6 +438,9 @@
     const projectApi = edaApi == null ? void 0 : edaApi.dmt_Project;
     const pcbApi = edaApi == null ? void 0 : edaApi.dmt_Pcb;
     const boardApi = edaApi == null ? void 0 : edaApi.dmt_Board;
+    const selectApi = edaApi == null ? void 0 : edaApi.dmt_SelectControl;
+    const teamApi = edaApi == null ? void 0 : edaApi.dmt_Team;
+    const workspaceApi = edaApi == null ? void 0 : edaApi.dmt_Workspace;
     const call = async (owner, method) => {
       if (!owner || typeof owner[method] !== "function") return void 0;
       try {
@@ -354,16 +449,19 @@
         return void 0;
       }
     };
-    const [project, pcb, board] = await Promise.all([
+    const [project, pcb, board, documentInfo, teamInfo, workspaceInfo] = await Promise.all([
       call(projectApi, "getCurrentProjectInfo"),
       call(pcbApi, "getCurrentPcbInfo"),
-      call(boardApi, "getCurrentBoardInfo")
+      call(boardApi, "getCurrentBoardInfo"),
+      call(selectApi, "getCurrentDocumentInfo"),
+      call(teamApi, "getCurrentTeamInfo"),
+      call(workspaceApi, "getCurrentWorkspaceInfo")
     ]);
-    if (!project && !pcb && !board) {
+    if (!project && !pcb && !board && !documentInfo) {
       throw new Error(
         t(
-          "\u672A\u8BFB\u53D6\u5230\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002\u8BF7\u5148\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u539F\u7406\u56FE\u6216 PCB \u753B\u5E03\u540E\u91CD\u8BD5\uFF1B\u82E5\u4ECD\u5931\u8D25\uFF0C\u8BF7\u5728\u201C\u73AF\u5883\u81EA\u68C0\u201D\u4E2D\u786E\u8BA4 dmt_Project / dmt_Pcb / dmt_Board \u53EF\u7528\u3002",
-          "Cannot read the current design context. Focus an opened schematic or PCB canvas and retry. If it still fails, verify dmt_Project / dmt_Pcb / dmt_Board in SelfCheck."
+          "\u672A\u8BFB\u53D6\u5230\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002\u8BF7\u5148\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u539F\u7406\u56FE\u6216 PCB \u753B\u5E03\u540E\u91CD\u8BD5\uFF1B\u82E5\u4ECD\u5931\u8D25\uFF0C\u8BF7\u5728\u201C\u73AF\u5883\u81EA\u68C0\u201D\u4E2D\u786E\u8BA4 dmt_Project / dmt_Pcb / dmt_Board / dmt_SelectControl \u53EF\u7528\u3002",
+          "Cannot read the current design context. Focus an opened schematic or PCB canvas and retry. If it still fails, verify dmt_Project / dmt_Pcb / dmt_Board / dmt_SelectControl in SelfCheck."
         )
       );
     }
@@ -379,7 +477,16 @@
       parentBoardName: String((pcb == null ? void 0 : pcb.parentBoardName) || "").trim(),
       boardName: String((board == null ? void 0 : board.name) || "").trim(),
       schematicUuid: String(((_c = board == null ? void 0 : board.schematic) == null ? void 0 : _c.uuid) || "").trim(),
-      schematicName: String(((_d = board == null ? void 0 : board.schematic) == null ? void 0 : _d.name) || "").trim()
+      schematicName: String(((_d = board == null ? void 0 : board.schematic) == null ? void 0 : _d.name) || "").trim(),
+      currentDocumentType: String((documentInfo == null ? void 0 : documentInfo.documentType) || "").trim(),
+      currentDocumentUuid: String((documentInfo == null ? void 0 : documentInfo.uuid) || "").trim(),
+      currentTabId: String((documentInfo == null ? void 0 : documentInfo.tabId) || "").trim(),
+      currentDocumentProjectUuid: String((documentInfo == null ? void 0 : documentInfo.parentProjectUuid) || "").trim(),
+      teamName: String((teamInfo == null ? void 0 : teamInfo.name) || "").trim(),
+      teamUuid: String((teamInfo == null ? void 0 : teamInfo.uuid) || "").trim(),
+      teamIdentity: Number.isFinite(Number(teamInfo == null ? void 0 : teamInfo.identity)) ? Number(teamInfo.identity) : "",
+      workspaceName: String((workspaceInfo == null ? void 0 : workspaceInfo.name) || "").trim(),
+      workspaceUuid: String((workspaceInfo == null ? void 0 : workspaceInfo.uuid) || "").trim()
     };
   }
   async function refreshCurrentEdaSnapshot(options) {
@@ -396,6 +503,250 @@
       render();
     }
   }
+  function safeFilePart(value, fallbackValue) {
+    const normalized = String(value || "").replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").trim();
+    return normalized || fallbackValue;
+  }
+  function makeTimestampToken() {
+    return iso().replaceAll(":", "").replaceAll(".", "").replace("T", "-").replace("Z", "");
+  }
+  async function ensureSnapshot() {
+    if (state.edaSnapshot) return state.edaSnapshot;
+    return refreshCurrentEdaSnapshot({ silent: true });
+  }
+  async function getCurrentDocumentInfoSafe() {
+    const selectApi = edaApi == null ? void 0 : edaApi.dmt_SelectControl;
+    if (!selectApi || typeof selectApi.getCurrentDocumentInfo !== "function") return null;
+    return await selectApi.getCurrentDocumentInfo().catch(() => void 0) || null;
+  }
+  function reportCounts() {
+    return {
+      types: state.db.types.length,
+      components: state.db.components.length,
+      warnings: state.db.components.filter(warning).length,
+      projects: state.db.projects.length,
+      pcbs: state.db.pcbs.length,
+      bomItems: state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0)
+    };
+  }
+  function reportTitle(kind, snapshot, extra) {
+    const projectLabel = projectDisplayNameFromSnapshot(snapshot) || t("\u5F53\u524D\u5DE5\u7A0B", "Current Design");
+    if (extra == null ? void 0 : extra.title) return extra.title;
+    if (kind === "context") return t(`\u5DE5\u7A0B\u5FEB\u7167\u62A5\u544A \xB7 ${projectLabel}`, `Context Report \xB7 ${projectLabel}`);
+    if (kind === "capture") return t(`\u753B\u5E03\u5FEB\u7167 \xB7 ${projectLabel}`, `Canvas Capture \xB7 ${projectLabel}`);
+    if (kind === "export") return t(`\u5236\u9020\u5BFC\u51FA \xB7 ${projectLabel}`, `Manufacture Export \xB7 ${projectLabel}`);
+    return t(`\u8BBE\u8BA1\u8BB0\u5F55 \xB7 ${projectLabel}`, `Design Record \xB7 ${projectLabel}`);
+  }
+  function buildContextReport(kind, extra) {
+    const snapshot = (extra == null ? void 0 : extra.snapshot) || state.edaSnapshot || null;
+    return {
+      id: id(),
+      kind,
+      title: reportTitle(kind, snapshot, extra),
+      createdAt: iso(),
+      snapshot,
+      counts: reportCounts(),
+      exportKind: (extra == null ? void 0 : extra.exportKind) || "",
+      fileName: (extra == null ? void 0 : extra.fileName) || "",
+      captureStrategy: (extra == null ? void 0 : extra.captureStrategy) || "",
+      notes: (extra == null ? void 0 : extra.notes) || "",
+      region: (extra == null ? void 0 : extra.region) || null
+    };
+  }
+  function reportKindText(kind) {
+    if (kind === "export") return t("\u5236\u9020\u5BFC\u51FA", "Manufacture Export");
+    if (kind === "capture") return t("\u753B\u5E03\u5FEB\u7167", "Canvas Capture");
+    return t("\u5DE5\u7A0B\u62A5\u544A", "Design Report");
+  }
+  function reportHtml(report) {
+    var _a2, _b2, _c, _d, _e;
+    const snapshot = (report == null ? void 0 : report.snapshot) || {};
+    const counts = (report == null ? void 0 : report.counts) || {};
+    const rows = [
+      [t("\u5DE5\u7A0B", "Project"), projectDisplayNameFromSnapshot(snapshot) || "-"],
+      [t("\u5F53\u524D PCB", "Current PCB"), pcbDisplayNameFromSnapshot(snapshot) || "-"],
+      [t("\u5F53\u524D\u677F\u5B50", "Current Board"), boardDisplayNameFromSnapshot(snapshot) || "-"],
+      [t("\u5F53\u524D\u6587\u6863\u7C7B\u578B", "Document Type"), (snapshot == null ? void 0 : snapshot.currentDocumentType) || "-"],
+      [t("\u56E2\u961F", "Team"), (snapshot == null ? void 0 : snapshot.teamName) || "-"],
+      [t("\u5DE5\u4F5C\u533A", "Workspace"), (snapshot == null ? void 0 : snapshot.workspaceName) || "-"],
+      [t("\u5143\u5668\u4EF6", "Components"), (_a2 = counts.components) != null ? _a2 : 0],
+      [t("\u5E93\u5B58\u9884\u8B66", "Warnings"), (_b2 = counts.warnings) != null ? _b2 : 0],
+      [t("\u9879\u76EE\u6570", "Projects"), (_c = counts.projects) != null ? _c : 0],
+      [t("PCB \u6570", "PCBs"), (_d = counts.pcbs) != null ? _d : 0],
+      [t("BOM \u660E\u7EC6", "BOM Items"), (_e = counts.bomItems) != null ? _e : 0],
+      [t("\u6587\u4EF6\u540D", "File Name"), (report == null ? void 0 : report.fileName) || "-"],
+      [t("\u5907\u6CE8", "Notes"), (report == null ? void 0 : report.notes) || "-"]
+    ];
+    return `<!doctype html><html><head><meta charset="utf-8" /><title>${e((report == null ? void 0 : report.title) || "Design Pulse Report")}</title><style>body{font-family:"Segoe UI","Microsoft YaHei",sans-serif;padding:24px;color:#182334}h1{margin:0 0 8px}p{color:#5b6b84}table{border-collapse:collapse;width:100%;margin-top:18px}th,td{border:1px solid #dbe3f0;padding:8px 10px;text-align:left}th{width:220px;background:#f5f8ff}pre{margin-top:18px;padding:14px;background:#f6f8fb;border:1px solid #dbe3f0;border-radius:12px;white-space:pre-wrap;word-break:break-word}</style></head><body><h1>${e((report == null ? void 0 : report.title) || "Design Pulse Report")}</h1><p>${e(`${reportKindText(report == null ? void 0 : report.kind)} \xB7 ${time(report == null ? void 0 : report.createdAt)}`)}</p><table>${rows.map((row) => `<tr><th>${e(row[0])}</th><td>${e(row[1])}</td></tr>`).join("")}</table><pre>${e(JSON.stringify(report, null, 2))}</pre></body></html>`;
+  }
+  async function saveBlobFile(fileData, fileName) {
+    await edaApi.sys_FileSystem.saveFile(fileData, fileName);
+  }
+  function snapshotStem(snapshot, suffix) {
+    return [
+      safeFilePart(projectDisplayNameFromSnapshot(snapshot), "project"),
+      safeFilePart(pcbDisplayNameFromSnapshot(snapshot), "pcb"),
+      safeFilePart(suffix, "asset"),
+      makeTimestampToken()
+    ].join("_");
+  }
+  async function exportStoredReport(reportId, format) {
+    const report = state.reportHistory.find((item) => item.id === reportId) || null;
+    if (!report) throw new Error(t("\u672A\u627E\u5230\u62A5\u544A\u8BB0\u5F55\u3002", "Report entry not found."));
+    if (format === "html") {
+      await saveBlobFile(new Blob([reportHtml(report)], { type: "text/html;charset=utf-8" }), `${safeFilePart(report.title, "design-pulse-report")}.html`);
+    } else {
+      await saveBlobFile(new Blob([`${JSON.stringify(report, null, 2)}
+`], { type: "application/json;charset=utf-8" }), `${safeFilePart(report.title, "design-pulse-report")}.json`);
+    }
+    setStatus("success", t("\u5DF2\u5BFC\u51FA\u62A5\u544A\u6587\u4EF6\u3002", "Report exported."));
+  }
+  async function generateContextReport() {
+    const snapshot = await ensureSnapshot();
+    const report = buildContextReport("context", {
+      snapshot,
+      notes: t("\u57FA\u4E8E\u5F53\u524D\u5DE5\u7A0B\u3001\u5F53\u524D\u6587\u6863\u3001\u56E2\u961F\u4E0E\u5DE5\u4F5C\u533A\u751F\u6210\u3002", "Generated from current design, document, team, and workspace context.")
+    });
+    await pushReport(report);
+    setStatus("success", t("\u5DF2\u751F\u6210\u5DE5\u7A0B\u5FEB\u7167\u62A5\u544A\u3002", "Context report generated."));
+    render();
+  }
+  function regionMarker(region) {
+    return [
+      {
+        type: "rectangle",
+        left: Number((region == null ? void 0 : region.left) || 0),
+        right: Number((region == null ? void 0 : region.right) || 0),
+        top: Number((region == null ? void 0 : region.top) || 0),
+        bottom: Number((region == null ? void 0 : region.bottom) || 0)
+      }
+    ];
+  }
+  async function zoomCanvas(strategy) {
+    var _a2, _b2;
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    const documentInfo = await getCurrentDocumentInfoSafe();
+    if (!editorApi || !documentInfo) throw new Error(t("\u5F53\u524D\u6CA1\u6709\u53EF\u64CD\u4F5C\u7684\u753B\u5E03\u6587\u6863\u3002", "No active canvas document."));
+    const action = strategy === "selected" ? (_a2 = editorApi.zoomToSelectedPrimitives) == null ? void 0 : _a2.bind(editorApi) : (_b2 = editorApi.zoomToAllPrimitives) == null ? void 0 : _b2.bind(editorApi);
+    if (!action) throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u8BE5\u753B\u5E03\u7F29\u653E\u63A5\u53E3\u3002", "Canvas zoom API is unavailable."));
+    const region = await action(documentInfo.tabId);
+    if (!region) {
+      throw new Error(
+        strategy === "selected" ? t("\u5F53\u524D\u6CA1\u6709\u53EF\u7F29\u653E\u7684\u9009\u4E2D\u56FE\u5143\u3002", "No selected primitives to focus.") : t("\u5F53\u524D\u6CA1\u6709\u53EF\u7F29\u653E\u7684\u56FE\u5143\u3002", "No primitives available to focus.")
+      );
+    }
+    return { documentInfo, region };
+  }
+  async function focusCanvas(strategy) {
+    await zoomCanvas(strategy);
+    setStatus("success", strategy === "selected" ? t("\u5DF2\u9002\u5E94\u5F53\u524D\u9009\u533A\u3002", "Selection focused.") : t("\u5DF2\u9002\u5E94\u5168\u90E8\u56FE\u5143\u3002", "All primitives focused."));
+  }
+  async function showCanvasMarker(strategy) {
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    if (!editorApi || typeof editorApi.generateIndicatorMarkers !== "function") {
+      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u6307\u793A\u6807\u8BB0\u63A5\u53E3\u3002", "Indicator marker API is unavailable."));
+    }
+    const { documentInfo, region } = await zoomCanvas(strategy);
+    const ok = await editorApi.generateIndicatorMarkers(
+      regionMarker(region),
+      { r: 22, g: 93, b: 255, alpha: 0.9 },
+      12,
+      true,
+      documentInfo.tabId
+    );
+    if (!ok) throw new Error(t("\u6307\u793A\u6807\u8BB0\u751F\u6210\u5931\u8D25\u3002", "Failed to create indicator markers."));
+    setStatus("success", strategy === "selected" ? t("\u5DF2\u6846\u9009\u5F53\u524D\u9009\u533A\u3002", "Current selection marked.") : t("\u5DF2\u6846\u9009\u5F53\u524D\u753B\u5E03\u8303\u56F4\u3002", "Current canvas area marked."));
+  }
+  async function clearCanvasMarkers() {
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    const documentInfo = await getCurrentDocumentInfoSafe();
+    if (!editorApi || typeof editorApi.removeIndicatorMarkers !== "function" || !documentInfo) {
+      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u6E05\u7406\u6307\u793A\u6807\u8BB0\u3002", "Cannot clear indicator markers in this EDA build."));
+    }
+    await editorApi.removeIndicatorMarkers(documentInfo.tabId);
+    setStatus("success", t("\u5DF2\u6E05\u9664\u753B\u5E03\u6307\u793A\u6807\u8BB0\u3002", "Canvas markers cleared."));
+  }
+  async function captureCanvas(strategy) {
+    const editorApi = edaApi == null ? void 0 : edaApi.dmt_EditorControl;
+    const documentInfo = await getCurrentDocumentInfoSafe();
+    if (!editorApi || typeof editorApi.getCurrentRenderedAreaImage !== "function" || !documentInfo) {
+      throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u753B\u5E03\u622A\u56FE\u63A5\u53E3\u3002", "Canvas capture API is unavailable."));
+    }
+    let region = null;
+    if (strategy === "all" || strategy === "selected") {
+      const zoomed = await zoomCanvas(strategy);
+      region = zoomed.region;
+    }
+    const blob = await editorApi.getCurrentRenderedAreaImage(documentInfo.tabId);
+    if (!blob) throw new Error(t("\u672A\u83B7\u53D6\u5230\u753B\u5E03\u56FE\u50CF\u3002", "No canvas image returned."));
+    const snapshot = await ensureSnapshot();
+    const suffix = strategy === "selected" ? t("selected-capture", "selected-capture") : strategy === "all" ? t("full-capture", "full-capture") : t("current-view", "current-view");
+    const fileName = `${snapshotStem(snapshot, suffix)}.png`;
+    await saveBlobFile(blob, fileName);
+    await pushReport(
+      buildContextReport("capture", {
+        snapshot,
+        fileName,
+        captureStrategy: strategy,
+        region,
+        notes: strategy === "selected" ? t("\u5DF2\u6309\u5F53\u524D\u9009\u533A\u9002\u5E94\u5E76\u622A\u56FE\u3002", "Captured after fitting current selection.") : strategy === "all" ? t("\u5DF2\u6309\u5168\u90E8\u56FE\u5143\u9002\u5E94\u5E76\u622A\u56FE\u3002", "Captured after fitting all primitives.") : t("\u5DF2\u622A\u56FE\u5F53\u524D\u53EF\u89C6\u533A\u57DF\u3002", "Captured current visible area.")
+      })
+    );
+    setStatus("success", t(`\u5DF2\u5BFC\u51FA\u753B\u5E03\u622A\u56FE\uFF1A${fileName}`, `Canvas capture exported: ${fileName}`));
+    render();
+  }
+  async function exportManufactureAsset(kind) {
+    const snapshot = await ensureSnapshot();
+    const pcbApi = edaApi == null ? void 0 : edaApi.pcb_ManufactureData;
+    const schApi = edaApi == null ? void 0 : edaApi.sch_ManufactureData;
+    const stem = snapshotStem(snapshot, kind);
+    let file = null;
+    if (kind === "bom") {
+      const fn = pcbApi && typeof pcbApi.getBomFile === "function" ? pcbApi.getBomFile.bind(pcbApi) : schApi && typeof schApi.getBomFile === "function" ? schApi.getBomFile.bind(schApi) : null;
+      if (!fn) throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301 BOM \u5BFC\u51FA\u63A5\u53E3\u3002", "BOM export API is unavailable."));
+      file = await fn(stem, state.exportPrefs.bomFileType);
+    } else if (kind === "gerber") {
+      if (!pcbApi || typeof pcbApi.getGerberFile !== "function") throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301 Gerber \u5BFC\u51FA\u63A5\u53E3\u3002", "Gerber export API is unavailable."));
+      file = await pcbApi.getGerberFile(stem, state.exportPrefs.gerberColorSilkscreen);
+    } else if (kind === "pickplace") {
+      if (!pcbApi || typeof pcbApi.getPickAndPlaceFile !== "function") throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u5750\u6807\u6587\u4EF6\u5BFC\u51FA\u63A5\u53E3\u3002", "Pick&Place export API is unavailable."));
+      file = await pcbApi.getPickAndPlaceFile(stem, state.exportPrefs.pickPlaceFileType);
+    } else if (kind === "model3d") {
+      if (!pcbApi || typeof pcbApi.get3DFile !== "function") throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301 3D \u5BFC\u51FA\u63A5\u53E3\u3002", "3D export API is unavailable."));
+      file = await pcbApi.get3DFile(
+        stem,
+        state.exportPrefs.modelFileType,
+        ["Component Model", "Via", "Silkscreen", "Wire In Signal Layer"],
+        state.exportPrefs.modelMode,
+        state.exportPrefs.autoGenerateModels
+      );
+    } else if (kind === "testpoint") {
+      if (!pcbApi || typeof pcbApi.getTestPointFile !== "function") throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u6D4B\u8BD5\u70B9\u62A5\u544A\u5BFC\u51FA\u63A5\u53E3\u3002", "Test point export API is unavailable."));
+      file = await pcbApi.getTestPointFile(stem, state.exportPrefs.pickPlaceFileType);
+    } else if (kind === "netlist") {
+      const fn = pcbApi && typeof pcbApi.getNetlistFile === "function" ? pcbApi.getNetlistFile.bind(pcbApi) : schApi && typeof schApi.getNetlistFile === "function" ? schApi.getNetlistFile.bind(schApi) : null;
+      if (!fn) throw new Error(t("\u5F53\u524D EDA \u7248\u672C\u4E0D\u652F\u6301\u7F51\u8868\u5BFC\u51FA\u63A5\u53E3\u3002", "Netlist export API is unavailable."));
+      file = await fn(stem);
+    }
+    if (!file) throw new Error(t("\u672A\u83B7\u53D6\u5230\u5BFC\u51FA\u6587\u4EF6\u3002\u8BF7\u786E\u8BA4\u5F53\u524D\u5DE5\u7A0B\u548C\u753B\u5E03\u4E0A\u4E0B\u6587\u53EF\u7528\u3002", "No file returned. Confirm the current design context is available."));
+    await saveBlobFile(file, file.name || `${stem}`);
+    await pushReport(
+      buildContextReport("export", {
+        snapshot,
+        fileName: file.name || stem,
+        exportKind: kind,
+        notes: t(`\u5DF2\u5BFC\u51FA ${kind} \u8D44\u6599\u3002`, `${kind} asset exported.`)
+      })
+    );
+    setStatus("success", t(`\u5DF2\u5BFC\u51FA\u5236\u9020\u8D44\u6599\uFF1A${file.name || stem}`, `Manufacture asset exported: ${file.name || stem}`));
+    render();
+  }
+  async function clearReportHistory() {
+    state.reportHistory = [];
+    await saveReportHistory();
+    setStatus("success", t("\u62A5\u544A\u5386\u53F2\u5DF2\u6E05\u7A7A\u3002", "Report history cleared."));
+    render();
+  }
   function typeMap() {
     return new Map(state.db.types.map((item) => [item.id, item]));
   }
@@ -410,11 +761,13 @@
     return Boolean((_b2 = (_a2 = state.prefs) == null ? void 0 : _a2.features) == null ? void 0 : _b2[key]);
   }
   function hasAnyEdaEntryEnabled() {
-    return featureEnabled("showEdaSnapshot") || featureEnabled("enableCurrentPcbImport") || featureEnabled("enableProjectBatchImport");
+    return featureEnabled("showEdaSnapshot") || featureEnabled("enableCurrentPcbImport") || featureEnabled("enableProjectBatchImport") || featureEnabled("enableReportsView") || featureEnabled("enableExportHub") || featureEnabled("enableCanvasTools");
   }
   function normalizeActiveView() {
     if (state.view === "purchase" && !featureEnabled("enablePurchaseView")) state.view = "dashboard";
     if (state.view === "stores" && !featureEnabled("enableStoresView")) state.view = "dashboard";
+    if (state.view === "reports" && !featureEnabled("enableReportsView")) state.view = "dashboard";
+    if (state.view === "exports" && !featureEnabled("enableExportHub")) state.view = "dashboard";
   }
   function warning(component) {
     return component.warningThreshold > 0 && component.totalQuantity <= component.warningThreshold;
@@ -425,16 +778,20 @@
   function header() {
     const actionButtons = [
       `<button class="ghost-button" data-action="import">${e(t("\u5BFC\u5165", "Import"))}</button>`,
+      featureEnabled("enableReportsView") ? `<button class="ghost-button" data-action="view" data-view="reports">${e(t("\u5DE5\u7A0B\u62A5\u544A", "Reports"))}</button>` : "",
+      featureEnabled("enableExportHub") ? `<button class="ghost-button" data-action="view" data-view="exports">${e(t("\u5BFC\u51FA\u4E2D\u5FC3", "Export Hub"))}</button>` : "",
       featureEnabled("enableCurrentPcbImport") ? `<button class="ghost-button" data-action="import-eda-bom">${e(t("\u4ECE\u5F53\u524D\u5DE5\u7A0B\u5BFC\u5165 BOM", "Import BOM from EDA"))}</button>` : "",
       featureEnabled("enableProjectBatchImport") ? `<button class="ghost-button" data-action="import-eda-project-bom">${e(t("\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165", "Batch Import Project"))}</button>` : "",
       `<button class="ghost-button" data-action="export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button>`,
       `<button class="ghost-button" data-action="export-xlsx">${e(t("\u5BFC\u51FA Excel(.xlsx)", "Export Excel (.xlsx)"))}</button>`
     ].filter(Boolean).join("");
-    return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t("\u7269\u6599\u7BA1\u7406\u52A9\u624B", "BOM Manager"))}</h1><p class="hero-copy">${e(t("\u5728\u63D2\u4EF6\u7A97\u53E3\u4E2D\u7EDF\u4E00\u7EF4\u62A4\u7C7B\u578B\u3001\u5143\u5668\u4EF6\u3001\u91C7\u8D2D\u8BB0\u5F55\u3001\u9879\u76EE\u3001PCB \u4E0E BOM\u3002", "Manage types, components, purchase records, projects, PCB and BOM in one place."))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
+    return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t("\u5DE5\u7A0B\u8109\u640F", "Design Pulse"))}</h1><p class="hero-copy">${e(t("\u56F4\u7ED5\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3001\u5236\u9020\u5BFC\u51FA\u3001\u753B\u5E03\u5FEB\u7167\u4E0E BOM \u534F\u4F5C\uFF0C\u63D0\u4F9B\u4E00\u5957\u8D34\u8FD1\u5609\u7ACB\u521B EDA \u5DE5\u4F5C\u6D41\u7684\u5DE5\u7A0B\u52A9\u624B\u3002", "A workflow-focused plugin for current design context, manufacture exports, canvas capture, and BOM collaboration in JLCEDA Pro."))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
   }
   function nav() {
     const items = [
       ["dashboard", "\u6982\u89C8", "Overview"],
+      featureEnabled("enableReportsView") ? ["reports", "\u62A5\u544A", "Reports"] : null,
+      featureEnabled("enableExportHub") ? ["exports", "\u5BFC\u51FA\u4E2D\u5FC3", "Export Hub"] : null,
       ["components", "\u5143\u5668\u4EF6", "Components"],
       ["types", "\u7C7B\u578B", "Types"],
       ["projects", "\u9879\u76EE/PCB", "Projects/PCB"],
@@ -455,9 +812,11 @@
     const boardLabel = boardDisplayNameFromSnapshot(snapshot);
     const refreshLabel = snapshot ? t("\u5237\u65B0\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Refresh Snapshot") : t("\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167", "Load Snapshot");
     const subtitle = state.edaSnapshotLoading ? t("\u6B63\u5728\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587...", "Reading current design context...") : snapshot ? t(`\u4E0A\u6B21\u8BFB\u53D6\uFF1A${time(snapshot.fetchedAt)}`, `Last loaded: ${time(snapshot.fetchedAt)}`) : t("\u5C1A\u672A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002", "Current design context has not been loaded yet.");
-    const details = snapshot ? `<div class="meta-grid"><div><span>${e(t("\u5DE5\u7A0B", "Project"))}</span><strong>${e(projectLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D PCB", "Current PCB"))}</span><strong>${e(pcbLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D\u677F\u5B50", "Current Board"))}</span><strong>${e(boardLabel || "-")}</strong></div><div><span>${e(t("\u5DE5\u7A0B\u6761\u76EE", "Project Items"))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ""}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`\u5DE5\u7A0B\u94FE\u63A5\u540D\uFF1A${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ""}${snapshot.schematicName ? `<li>${e(t(`\u5F53\u524D\u539F\u7406\u56FE\uFF1A${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ""}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ""}</ul>` : `<p class="empty-state">${e(t("\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u5DE5\u7A0B\u540E\u70B9\u51FB\u201C\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u201D\uFF0C\u63D2\u4EF6\u4F1A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u3001PCB \u4E0E\u677F\u5B50\u4FE1\u606F\u3002", 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
+    const details = snapshot ? `<div class="meta-grid"><div><span>${e(t("\u5DE5\u7A0B", "Project"))}</span><strong>${e(projectLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D PCB", "Current PCB"))}</span><strong>${e(pcbLabel || "-")}</strong></div><div><span>${e(t("\u5F53\u524D\u677F\u5B50", "Current Board"))}</span><strong>${e(boardLabel || "-")}</strong></div><div><span>${e(t("\u5DE5\u7A0B\u6761\u76EE", "Project Items"))}</span><strong>${snapshot.projectDataCount || 0}</strong></div><div><span>${e(t("\u5F53\u524D\u6587\u6863", "Current Document"))}</span><strong>${e(snapshot.currentDocumentType || "-")}</strong></div><div><span>${e(t("\u56E2\u961F/\u5DE5\u4F5C\u533A", "Team/Workspace"))}</span><strong>${e(`${snapshot.teamName || "-"} / ${snapshot.workspaceName || "-"}`)}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ""}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`\u5DE5\u7A0B\u94FE\u63A5\u540D\uFF1A${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ""}${snapshot.schematicName ? `<li>${e(t(`\u5F53\u524D\u539F\u7406\u56FE\uFF1A${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ""}${snapshot.currentDocumentUuid ? `<li>${e(t(`\u5F53\u524D\u6587\u6863 UUID\uFF1A${snapshot.currentDocumentUuid}`, `Document UUID: ${snapshot.currentDocumentUuid}`))}</li>` : ""}${snapshot.projectUuid ? `<li>${e(`Project UUID: ${snapshot.projectUuid}`)}</li>` : ""}</ul>` : `<p class="empty-state">${e(t("\u5207\u6362\u5230\u5DF2\u6253\u5F00\u7684\u5DE5\u7A0B\u540E\u70B9\u51FB\u201C\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u201D\uFF0C\u63D2\u4EF6\u4F1A\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u3001PCB \u4E0E\u677F\u5B50\u4FE1\u606F\u3002", 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
     const buttons = [
       `<button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? "disabled" : ""}>${e(refreshLabel)}</button>`,
+      featureEnabled("enableReportsView") ? `<button class="ghost-button" type="button" data-action="view" data-view="reports">${e(t("\u67E5\u770B\u62A5\u544A", "Open Reports"))}</button>` : "",
+      featureEnabled("enableExportHub") ? `<button class="ghost-button" type="button" data-action="view" data-view="exports">${e(t("\u5236\u9020\u5BFC\u51FA", "Open Exports"))}</button>` : "",
       featureEnabled("enableProjectBatchImport") ? `<button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t("\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165", "Batch Import Project"))}</button>` : "",
       featureEnabled("enableCurrentPcbImport") ? `<button class="primary-button" type="button" data-action="import-eda-bom">${e(t("\u5BFC\u5165\u5F53\u524D PCB BOM", "Import Current PCB BOM"))}</button>` : ""
     ].filter(Boolean).join("");
@@ -469,6 +828,8 @@
     app.innerHTML = `<div class="app-shell">${header()}${nav()}${status()}<main class="page-content">${view()}</main>${modal()}</div>`;
   }
   function view() {
+    if (state.view === "reports") return reportsView();
+    if (state.view === "exports") return exportsView();
     if (state.view === "types") return typesView();
     if (state.view === "components") return componentsView();
     if (state.view === "projects") return projectsView();
@@ -481,14 +842,41 @@
     const warningCount = state.db.components.filter(warning).length;
     const recordCount = state.db.components.reduce((sum, item) => sum + item.records.length, 0);
     const bomCount = state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0);
+    const reportCount = state.reportHistory.length;
     const quickActions = [
-      `<button class="primary-button" data-action="view" data-view="components">${e(t("\u65B0\u589E\u5143\u5668\u4EF6", "Add Component"))}</button>`,
+      featureEnabled("enableReportsView") ? `<button class="primary-button" data-action="generate-context-report">${e(t("\u751F\u6210\u5DE5\u7A0B\u62A5\u544A", "Generate Report"))}</button>` : `<button class="primary-button" data-action="view" data-view="components">${e(t("\u65B0\u589E\u5143\u5668\u4EF6", "Add Component"))}</button>`,
+      featureEnabled("enableExportHub") ? `<button class="ghost-button" data-action="view" data-view="exports">${e(t("\u6253\u5F00\u5BFC\u51FA\u4E2D\u5FC3", "Open Export Hub"))}</button>` : "",
+      featureEnabled("enableReportsView") ? `<button class="ghost-button" data-action="view" data-view="reports">${e(t("\u67E5\u770B\u62A5\u544A\u5386\u53F2", "Open Report History"))}</button>` : "",
       `<button class="ghost-button" data-action="view" data-view="projects">${e(t("\u7EF4\u62A4\u9879\u76EE/PCB", "Manage Projects/PCB"))}</button>`,
       featureEnabled("enableStoresView") ? `<button class="ghost-button" data-action="view" data-view="stores">${e(t("\u7EF4\u62A4\u5E97\u94FA", "Manage Stores"))}</button>` : "",
       featureEnabled("enablePurchaseView") ? `<button class="ghost-button" data-action="view" data-view="purchase">${e(t("\u67E5\u770B\u91C7\u8D2D\u6E05\u5355", "Open Purchase List"))}</button>` : ""
     ].filter(Boolean).join("");
     const snapshotCard = currentEdaSnapshotCard();
-    return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t("\u5143\u5668\u4EF6", "Components"))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t("\u5E93\u5B58\u9884\u8B66", "Warnings"))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t("\u91C7\u8D2D\u8BB0\u5F55", "Records"))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t("BOM \u660E\u7EC6", "BOM Items"))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u5FEB\u901F\u5165\u53E3", "Quick Actions"))}</h2><div class="quick-actions">${quickActions}</div></article>${snapshotCard}</section><section class="panel-card"><h2>${e(t("\u4F7F\u7528\u63D0\u793A", "Tips"))}</h2><ul class="info-list"><li>${e(t("\u5EFA\u8BAE\u5B9A\u671F\u5BFC\u51FA JSON \u505A\u79BB\u7EBF\u5907\u4EFD\u3002", "Export JSON regularly for offline backup."))}</li><li>${e(t("\u8DE8\u8BBE\u5907/\u8DE8\u8D26\u53F7\u53EF\u7528\u5BFC\u5165\u6062\u590D\u3002", "Use Import to restore across devices/accounts."))}</li><li>${e(t("\u7A97\u53E3\u6807\u9898\u680F\u73B0\u5728\u652F\u6301\u6700\u5927\u5316\u4E0E\u6700\u5C0F\u5316\uFF1B\u5982\u7A97\u53E3\u88AB\u6700\u5C0F\u5316\uFF0C\u518D\u6B21\u70B9\u51FB\u63D2\u4EF6\u83DC\u5355\u5373\u53EF\u6062\u590D\u663E\u793A\u3002", "The iframe window now supports maximize and minimize. If it is minimized, click the plugin menu again to restore it."))}</li><li>${e(t("\u9700\u8981\u5BFC\u5165\u5F53\u524D\u5DE5\u7A0B BOM \u65F6\uFF0C\u5148\u8BFB\u53D6\u5DE5\u7A0B\u5FEB\u7167\u53EF\u4EE5\u66F4\u76F4\u89C2\u770B\u5230\u5C06\u8981\u5199\u5165\u7684\u5DE5\u7A0B/PCB \u6765\u6E90\u3002", "Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM."))}</li></ul></section>`;
+    return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t("\u5143\u5668\u4EF6", "Components"))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t("\u5E93\u5B58\u9884\u8B66", "Warnings"))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t("\u62A5\u544A\u5386\u53F2", "Reports"))}</span><strong>${reportCount}</strong></article><article class="summary-card accent-red"><span>${e(t("BOM \u660E\u7EC6", "BOM Items"))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u5FEB\u901F\u5165\u53E3", "Quick Actions"))}</h2><div class="quick-actions">${quickActions}</div><div class="quick-actions">${featureEnabled("enableCanvasTools") ? `<button class="ghost-button" data-action="capture-canvas-current">${e(t("\u622A\u56FE\u5F53\u524D\u89C6\u56FE", "Capture Current View"))}</button>` : ""}${featureEnabled("enableCanvasTools") ? `<button class="ghost-button" data-action="capture-canvas-selected">${e(t("\u622A\u56FE\u5F53\u524D\u9009\u533A", "Capture Selection"))}</button>` : ""}${featureEnabled("enableCanvasTools") ? `<button class="ghost-button" data-action="mark-canvas-selected">${e(t("\u6846\u9009\u5F53\u524D\u9009\u533A", "Mark Selection"))}</button>` : ""}</div></article>${snapshotCard}</section><section class="panel-card"><h2>${e(t("\u4F7F\u7528\u63D0\u793A", "Tips"))}</h2><ul class="info-list"><li>${e(t("\u5EFA\u8BAE\u5728\u201C\u62A5\u544A\u201D\u9875\u5B9A\u671F\u751F\u6210\u5DE5\u7A0B\u5FEB\u7167\uFF0C\u4FBF\u4E8E\u56DE\u770B\u5F53\u524D\u753B\u5E03\u3001\u56E2\u961F\u548C\u5DE5\u4F5C\u533A\u4E0A\u4E0B\u6587\u3002", "Generate context reports regularly in Reports for quick traceability of current design, team, and workspace context."))}</li><li>${e(t("\u5236\u9020\u5BFC\u51FA\u96C6\u4E2D\u5728\u201C\u5BFC\u51FA\u4E2D\u5FC3\u201D\u91CC\uFF0C\u9002\u5408\u505A Gerber\u3001\u5750\u6807\u30013D\u3001\u7F51\u8868\u548C\u6D4B\u8BD5\u70B9\u8D44\u6599\u7684\u7EDF\u4E00\u5BFC\u51FA\u3002", "Use Export Hub to keep Gerber, Pick&Place, 3D, netlist, and test point exports in one place."))}</li><li>${e(t("\u7A97\u53E3\u6807\u9898\u680F\u73B0\u5728\u652F\u6301\u6700\u5927\u5316\u4E0E\u6700\u5C0F\u5316\uFF1B\u5982\u7A97\u53E3\u88AB\u6700\u5C0F\u5316\uFF0C\u518D\u6B21\u70B9\u51FB\u63D2\u4EF6\u83DC\u5355\u5373\u53EF\u6062\u590D\u663E\u793A\u3002", "The iframe window now supports maximize and minimize. If it is minimized, click the plugin menu again to restore it."))}</li><li>${e(t("\u9700\u8981\u5BFC\u5165\u5F53\u524D\u5DE5\u7A0B BOM \u65F6\uFF0C\u5148\u8BFB\u53D6\u5DE5\u7A0B\u5FEB\u7167\u53EF\u4EE5\u66F4\u76F4\u89C2\u770B\u5230\u5C06\u8981\u5199\u5165\u7684\u5DE5\u7A0B/PCB \u6765\u6E90\u3002", "Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM."))}</li></ul></section>`;
+  }
+  function reportsView() {
+    const snapshot = state.edaSnapshot;
+    const contextPanel = `<section class="panel-card"><div class="section-head"><h2>${e(t("\u5DE5\u7A0B\u62A5\u544A", "Engineering Reports"))}</h2><div class="inline-actions"><button class="primary-button" type="button" data-action="generate-context-report">${e(t("\u751F\u6210\u5FEB\u7167\u62A5\u544A", "Generate Context Report"))}</button><button class="ghost-button" type="button" data-action="refresh-eda-snapshot">${e(t("\u5237\u65B0\u4E0A\u4E0B\u6587", "Refresh Context"))}</button></div></div><p class="support-text">${e(snapshot ? t(`\u5F53\u524D\u6587\u6863\uFF1A${snapshot.currentDocumentType || "-"}\uFF0C\u56E2\u961F\uFF1A${snapshot.teamName || "-"}\uFF0C\u5DE5\u4F5C\u533A\uFF1A${snapshot.workspaceName || "-"}`, `Current document: ${snapshot.currentDocumentType || "-"}, team: ${snapshot.teamName || "-"}, workspace: ${snapshot.workspaceName || "-"}`) : t("\u5148\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\uFF0C\u518D\u751F\u6210\u62A5\u544A\u3002", "Load the current design snapshot before generating reports."))}</p><div class="meta-grid"><div><span>${e(t("\u5DE5\u7A0B", "Project"))}</span><strong>${e(projectDisplayNameFromSnapshot(snapshot) || "-")}</strong></div><div><span>${e(t("PCB", "PCB"))}</span><strong>${e(pcbDisplayNameFromSnapshot(snapshot) || "-")}</strong></div><div><span>${e(t("\u677F\u5B50", "Board"))}</span><strong>${e(boardDisplayNameFromSnapshot(snapshot) || "-")}</strong></div><div><span>${e(t("\u6587\u6863\u7C7B\u578B", "Document Type"))}</span><strong>${e((snapshot == null ? void 0 : snapshot.currentDocumentType) || "-")}</strong></div><div><span>${e(t("\u56E2\u961F", "Team"))}</span><strong>${e((snapshot == null ? void 0 : snapshot.teamName) || "-")}</strong></div><div><span>${e(t("\u5DE5\u4F5C\u533A", "Workspace"))}</span><strong>${e((snapshot == null ? void 0 : snapshot.workspaceName) || "-")}</strong></div></div></section>`;
+    const canvasButtons = featureEnabled("enableCanvasTools") ? `<section class="panel-card"><div class="section-head"><h2>${e(t("\u753B\u5E03\u5DE5\u5177", "Canvas Tools"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="clear-canvas-markers">${e(t("\u6E05\u9664\u6807\u8BB0", "Clear Markers"))}</button></div></div><div class="quick-actions"><button class="ghost-button" type="button" data-action="zoom-canvas-all">${e(t("\u9002\u5E94\u5168\u90E8", "Fit All"))}</button><button class="ghost-button" type="button" data-action="zoom-canvas-selected">${e(t("\u9002\u5E94\u9009\u4E2D", "Fit Selected"))}</button><button class="ghost-button" type="button" data-action="mark-canvas-all">${e(t("\u6846\u9009\u5168\u90E8\u8303\u56F4", "Mark All"))}</button><button class="ghost-button" type="button" data-action="mark-canvas-selected">${e(t("\u6846\u9009\u5F53\u524D\u9009\u533A", "Mark Selected"))}</button><button class="primary-button" type="button" data-action="capture-canvas-current">${e(t("\u622A\u56FE\u5F53\u524D\u89C6\u56FE", "Capture Current View"))}</button><button class="primary-button" type="button" data-action="capture-canvas-all">${e(t("\u622A\u56FE\u5168\u90E8\u56FE\u5143", "Capture All"))}</button><button class="primary-button" type="button" data-action="capture-canvas-selected">${e(t("\u622A\u56FE\u5F53\u524D\u9009\u533A", "Capture Selection"))}</button></div><p class="support-text">${e(t("\u9002\u5408\u5728 PCB/\u539F\u7406\u56FE\u6392\u67E5\u65F6\u5FEB\u901F\u6846\u9009\u3001\u622A\u56FE\u5E76\u5199\u5165\u62A5\u544A\u5386\u53F2\u3002", "Use these tools to frame, capture, and record canvas context while reviewing PCB or schematic documents."))}</p></section>` : "";
+    const historyItems = state.reportHistory.map(
+      (item) => {
+        var _a2;
+        return `<article class="entity-card"><header class="entity-header"><div><h3>${e(item.title || reportKindText(item.kind))}</h3><p>${e(`${reportKindText(item.kind)} \xB7 ${time(item.createdAt)}`)}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="export-report-json" data-report-id="${item.id}">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" type="button" data-action="export-report-html" data-report-id="${item.id}">${e(t("\u5BFC\u51FA HTML", "Export HTML"))}</button><button class="danger-button" type="button" data-action="delete-report" data-report-id="${item.id}">${e(t("\u5220\u9664", "Delete"))}</button></div></header><div class="meta-grid"><div><span>${e(t("\u5DE5\u7A0B", "Project"))}</span><strong>${e(projectDisplayNameFromSnapshot(item.snapshot) || "-")}</strong></div><div><span>${e(t("\u6587\u6863\u7C7B\u578B", "Document Type"))}</span><strong>${e(((_a2 = item.snapshot) == null ? void 0 : _a2.currentDocumentType) || "-")}</strong></div><div><span>${e(t("\u6587\u4EF6", "File"))}</span><strong>${e(item.fileName || "-")}</strong></div><div><span>${e(t("\u5907\u6CE8", "Notes"))}</span><strong>${e(item.notes || "-")}</strong></div></div></article>`;
+      }
+    ).join("");
+    const historyPanel = `<section class="panel-card"><div class="section-head"><h2>${e(t("\u62A5\u544A\u5386\u53F2", "Report History"))}</h2><div class="inline-actions"><span class="pill">${e(t(`\u4FDD\u7559\u6700\u8FD1 ${state.exportPrefs.reportHistoryLimit} \u6761`, `Keep latest ${state.exportPrefs.reportHistoryLimit}`))}</span><button class="ghost-button" type="button" data-action="clear-report-history">${e(t("\u6E05\u7A7A\u5386\u53F2", "Clear History"))}</button></div></div>${historyItems || `<p class="empty-state">${e(t("\u5C1A\u65E0\u62A5\u544A\u5386\u53F2\u3002\u751F\u6210\u5DE5\u7A0B\u62A5\u544A\u6216\u5BFC\u51FA/\u622A\u56FE\u540E\u4F1A\u81EA\u52A8\u8BB0\u5F55\u3002", "No report history yet. Reports, exports, and captures will appear here automatically."))}</p>`}</section>`;
+    return `${contextPanel}${canvasButtons}${historyPanel}`;
+  }
+  function exportsView() {
+    const exportCards = [
+      ["bom", t("BOM \u6587\u4EF6", "BOM File"), t("\u6309\u5F53\u524D\u6587\u6863\u81EA\u52A8\u9009\u62E9 PCB / \u539F\u7406\u56FE\u5BFC\u51FA BOM\u3002", "Export BOM from the current PCB or schematic context.")],
+      ["gerber", t("Gerber \u5236\u7248", "Gerber Package"), t("\u5BFC\u51FA\u5F53\u524D PCB \u7684\u5236\u7248\u6587\u4EF6\u3002", "Export Gerber manufacturing package for the current PCB.")],
+      ["pickplace", t("\u8D34\u7247\u5750\u6807", "Pick&Place"), t("\u5BFC\u51FA\u5F53\u524D PCB \u7684\u5750\u6807\u6587\u4EF6\u3002", "Export pick-and-place coordinates for the current PCB.")],
+      ["model3d", t("3D \u6A21\u578B", "3D Model"), t("\u5BFC\u51FA STEP/OBJ 3D \u6A21\u578B\u3002", "Export STEP/OBJ 3D model files.")],
+      ["testpoint", t("\u6D4B\u8BD5\u70B9\u62A5\u544A", "Test Point"), t("\u5BFC\u51FA\u6D4B\u8BD5\u70B9\u62A5\u544A\u7528\u4E8E\u6D4B\u8BD5\u5939\u5177\u51C6\u5907\u3002", "Export test point files for test-fixture preparation.")],
+      ["netlist", t("\u7F51\u8868\u6587\u4EF6", "Netlist"), t("\u6309\u5F53\u524D\u6587\u6863\u5BFC\u51FA\u7F51\u8868\u6587\u4EF6\u3002", "Export netlist from the current document context.")]
+    ];
+    return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u5BFC\u51FA\u9884\u8BBE", "Export Presets"))}</h2><form id="export-prefs-form" class="stack-form"><label><span>${e(t("BOM \u683C\u5F0F", "BOM Format"))}</span><select name="bomFileType"><option value="xlsx" ${state.exportPrefs.bomFileType === "xlsx" ? "selected" : ""}>XLSX</option><option value="csv" ${state.exportPrefs.bomFileType === "csv" ? "selected" : ""}>CSV</option></select></label><label><span>${e(t("\u5750\u6807\u683C\u5F0F", "Pick&Place Format"))}</span><select name="pickPlaceFileType"><option value="xlsx" ${state.exportPrefs.pickPlaceFileType === "xlsx" ? "selected" : ""}>XLSX</option><option value="csv" ${state.exportPrefs.pickPlaceFileType === "csv" ? "selected" : ""}>CSV</option></select></label><label><span>${e(t("3D \u683C\u5F0F", "3D Format"))}</span><select name="modelFileType"><option value="step" ${state.exportPrefs.modelFileType === "step" ? "selected" : ""}>STEP</option><option value="obj" ${state.exportPrefs.modelFileType === "obj" ? "selected" : ""}>OBJ</option></select></label><label><span>${e(t("3D \u6A21\u5F0F", "3D Mode"))}</span><select name="modelMode"><option value="Outfit" ${state.exportPrefs.modelMode === "Outfit" ? "selected" : ""}>Outfit</option><option value="Parts" ${state.exportPrefs.modelMode === "Parts" ? "selected" : ""}>Parts</option></select></label><label><span>${e(t("\u62A5\u544A\u5386\u53F2\u6761\u6570", "Report History Limit"))}</span><input name="reportHistoryLimit" type="number" min="3" max="20" step="1" value="${e(state.exportPrefs.reportHistoryLimit)}" /></label><label class="checkbox-row"><input type="checkbox" name="gerberColorSilkscreen" ${state.exportPrefs.gerberColorSilkscreen ? "checked" : ""} /><span>${e(t("Gerber \u542F\u7528\u5F69\u8272\u4E1D\u5370", "Use color silkscreen for Gerber"))}</span></label><label class="checkbox-row"><input type="checkbox" name="autoGenerateModels" ${state.exportPrefs.autoGenerateModels ? "checked" : ""} /><span>${e(t("3D \u81EA\u52A8\u8865\u5168\u672A\u7ED1\u5B9A\u6A21\u578B", "Auto-generate missing 3D models"))}</span></label><button class="primary-button" type="submit">${e(t("\u4FDD\u5B58\u9884\u8BBE", "Save Presets"))}</button></form></article><article class="panel-card"><h2>${e(t("\u5BFC\u51FA\u8BF4\u660E", "Export Notes"))}</h2><ul class="info-list"><li>${e(t("BOM \u548C\u7F51\u8868\u4F1A\u4F18\u5148\u6309\u5F53\u524D\u753B\u5E03\u4E0A\u4E0B\u6587\u9009\u62E9 PCB \u6216\u539F\u7406\u56FE\u63A5\u53E3\u3002", "BOM and netlist prefer the active PCB or schematic context automatically."))}</li><li>${e(t("Gerber\u3001\u5750\u6807\u30013D\u3001\u6D4B\u8BD5\u70B9\u8D44\u6599\u4F9D\u8D56\u5F53\u524D PCB \u6587\u6863\u3002", "Gerber, Pick&Place, 3D, and test point exports require an active PCB document."))}</li><li>${e(t("\u6BCF\u6B21\u5BFC\u51FA\u90FD\u4F1A\u81EA\u52A8\u5199\u5165\u201C\u62A5\u544A\u5386\u53F2\u201D\uFF0C\u4FBF\u4E8E\u56DE\u770B\u5BFC\u51FA\u65F6\u95F4\u548C\u5DE5\u7A0B\u4E0A\u4E0B\u6587\u3002", "Each export is recorded in Report History for later traceability."))}</li></ul></article></section><section class="panel-card"><div class="section-head"><h2>${e(t("\u5236\u9020\u5BFC\u51FA\u4E2D\u5FC3", "Manufacture Export Hub"))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot">${e(t("\u5237\u65B0\u4E0A\u4E0B\u6587", "Refresh Context"))}</button></div></div><div class="export-grid">${exportCards.map(([kind, title, desc]) => `<article class="export-card"><h3>${e(title)}</h3><p>${e(desc)}</p><button class="primary-button" type="button" data-action="export-manufacture" data-kind="${kind}">${e(t("\u7ACB\u5373\u5BFC\u51FA", "Export Now"))}</button></article>`).join("")}</div></section>`;
   }
   function typesView() {
     const current = active("types", state.editingTypeId);
@@ -623,7 +1011,7 @@
   function settingsView() {
     const features = { ...defaultFeatureFlags(), ...state.prefs.features || {} };
     const toggleRow = (name, labelZh, labelEn, descZh, descEn) => `<div class="stack-list"><label class="checkbox-row"><input type="checkbox" name="${name}" ${features[name] ? "checked" : ""} /><span>${e(t(labelZh, labelEn))}</span></label><p class="support-text">${e(t(descZh, descEn))}</p></div>`;
-    return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u754C\u9762\u504F\u597D", "Preferences"))}</h2><form id="prefs-form" class="stack-form"><label><span>${e(t("\u8BED\u8A00", "Language"))}</span><select name="lang"><option value="zh" ${state.prefs.lang === "zh" ? "selected" : ""}>\u4E2D\u6587</option><option value="en" ${state.prefs.lang === "en" ? "selected" : ""}>English</option></select></label><label><span>${e(t("\u4E3B\u9898", "Theme"))}</span><select name="theme"><option value="light" ${state.prefs.theme === "light" ? "selected" : ""}>${e(t("\u4EAE\u8272", "Light"))}</option><option value="dark" ${state.prefs.theme === "dark" ? "selected" : ""}>${e(t("\u6697\u8272", "Dark"))}</option></select></label><div class="subsection-head"><h3>${e(t("EDA \u96C6\u6210\u529F\u80FD", "EDA Integration"))}</h3></div>${toggleRow("showEdaSnapshot", "\u663E\u793A\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u5361\u7247", "Show current design snapshot", "\u5728\u9996\u9875\u663E\u793A\u5F53\u524D\u5DE5\u7A0B\u3001PCB\u3001\u677F\u5B50\u4FE1\u606F\u548C\u5237\u65B0\u5165\u53E3\u3002", "Show current project, PCB, board info and refresh actions on the dashboard.")}${toggleRow("enableCurrentPcbImport", "\u542F\u7528\u5F53\u524D PCB BOM \u5BFC\u5165", "Enable current PCB BOM import", "\u4FDD\u7559\u201C\u4ECE\u5F53\u524D\u5DE5\u7A0B\u5BFC\u5165 BOM\u201D\u548C\u201C\u5BFC\u5165\u5F53\u524D PCB BOM\u201D\u5165\u53E3\u3002", "Keep the current-PCB BOM import actions available.")}${toggleRow("enableProjectBatchImport", "\u542F\u7528\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165", "Enable project batch import", "\u4FDD\u7559\u201C\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165\u201D\u5165\u53E3\uFF0C\u53EF\u540C\u6B65\u5F53\u524D\u5DE5\u7A0B\u4E0B\u5168\u90E8 PCB\u3002", "Keep the batch-import action to sync all PCB under the current project.")}${toggleRow("enableOpenSourcePcb", "\u542F\u7528\u201C\u6253\u5F00\u5BF9\u5E94 PCB\u201D", "Enable open source PCB action", "\u5728\u9879\u76EE\u9875\u4E3A\u5DF2\u5173\u8054\u5BBF\u4E3B PCB \u7684\u8BB0\u5F55\u663E\u793A\u201C\u4E00\u952E\u6253\u5F00\u5BF9\u5E94 PCB\u201D\u3002", "Show the one-click open action for PCB entries linked to JLCEDA documents.")}${toggleRow("autoLoadEdaSnapshot", "\u542F\u52A8\u65F6\u81EA\u52A8\u8BFB\u53D6\u5DE5\u7A0B\u5FEB\u7167", "Auto load snapshot on startup", "\u63D2\u4EF6\u6253\u5F00\u65F6\u81EA\u52A8\u5C1D\u8BD5\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\uFF1B\u5931\u8D25\u65F6\u53EF\u624B\u52A8\u5237\u65B0\u3002", "Try to read the current design context when the plugin opens; you can still refresh manually if it fails.")}<div class="subsection-head"><h3>${e(t("\u9875\u9762\u529F\u80FD", "Views"))}</h3></div>${toggleRow("enablePurchaseView", "\u542F\u7528\u91C7\u8D2D\u6E05\u5355\u9875\u9762", "Enable purchase view", "\u663E\u793A\u91C7\u8D2D\u6E05\u5355\u5BFC\u822A\u3001\u5FEB\u6377\u5165\u53E3\u548C\u5BFC\u51FA\u80FD\u529B\u3002", "Show the purchase list page, shortcuts and export actions.")}${toggleRow("enableStoresView", "\u542F\u7528\u5E97\u94FA\u9875\u9762", "Enable stores view", "\u663E\u793A\u5E97\u94FA\u7EF4\u62A4\u9875\u9762\uFF0C\u4FBF\u4E8E\u7BA1\u7406\u4F9B\u5E94\u5546\u4E0E\u91C7\u8D2D\u8BB0\u5F55\u3002", "Show the stores page for supplier and purchase-record management.")}<button class="primary-button" type="submit">${e(t("\u4FDD\u5B58\u504F\u597D", "Save"))}</button></form></article><article class="panel-card"><h2>${e(t("\u63D2\u4EF6\u5B58\u50A8", "Plugin Storage"))}</h2><ul class="info-list"><li>${e(t(`\u5F53\u524D\u5171 ${state.db.types.length} \u4E2A\u7C7B\u578B\u3001${state.db.components.length} \u4E2A\u5143\u5668\u4EF6\u3001${state.db.projects.length} \u4E2A\u9879\u76EE\u3002`, `Current totals: ${state.db.types.length} types, ${state.db.components.length} components, ${state.db.projects.length} projects.`))}</li><li>${e(t("\u7A97\u53E3\u6807\u9898\u680F\u5DF2\u652F\u6301\u6700\u5927\u5316\u4E0E\u6700\u5C0F\u5316\uFF1B\u7A97\u53E3\u6700\u5C0F\u5316\u540E\uFF0C\u518D\u70B9\u51FB\u63D2\u4EF6\u83DC\u5355\u53EF\u6062\u590D\u3002", "The window title bar now supports maximize and minimize. Click the plugin menu again to restore a minimized window."))}</li></ul><div class="inline-actions"><button class="ghost-button" data-action="import">${e(t("\u5BFC\u5165", "Import"))}</button><button class="ghost-button" data-action="export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" data-action="export-xlsx">${e(t("\u5BFC\u51FA Excel(.xlsx)", "Export Excel (.xlsx)"))}</button><button class="danger-button" data-action="reset">${e(t("\u91CD\u7F6E\u6570\u636E", "Reset Data"))}</button></div></article></section>`;
+    return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t("\u754C\u9762\u504F\u597D", "Preferences"))}</h2><form id="prefs-form" class="stack-form"><label><span>${e(t("\u8BED\u8A00", "Language"))}</span><select name="lang"><option value="zh" ${state.prefs.lang === "zh" ? "selected" : ""}>\u4E2D\u6587</option><option value="en" ${state.prefs.lang === "en" ? "selected" : ""}>English</option></select></label><label><span>${e(t("\u4E3B\u9898", "Theme"))}</span><select name="theme"><option value="light" ${state.prefs.theme === "light" ? "selected" : ""}>${e(t("\u4EAE\u8272", "Light"))}</option><option value="dark" ${state.prefs.theme === "dark" ? "selected" : ""}>${e(t("\u6697\u8272", "Dark"))}</option></select></label><div class="subsection-head"><h3>${e(t("EDA \u96C6\u6210\u529F\u80FD", "EDA Integration"))}</h3></div>${toggleRow("showEdaSnapshot", "\u663E\u793A\u5F53\u524D\u5DE5\u7A0B\u5FEB\u7167\u5361\u7247", "Show current design snapshot", "\u5728\u9996\u9875\u663E\u793A\u5F53\u524D\u5DE5\u7A0B\u3001PCB\u3001\u677F\u5B50\u4FE1\u606F\u548C\u5237\u65B0\u5165\u53E3\u3002", "Show current project, PCB, board info and refresh actions on the dashboard.")}${toggleRow("enableCurrentPcbImport", "\u542F\u7528\u5F53\u524D PCB BOM \u5BFC\u5165", "Enable current PCB BOM import", "\u4FDD\u7559\u201C\u4ECE\u5F53\u524D\u5DE5\u7A0B\u5BFC\u5165 BOM\u201D\u548C\u201C\u5BFC\u5165\u5F53\u524D PCB BOM\u201D\u5165\u53E3\u3002", "Keep the current-PCB BOM import actions available.")}${toggleRow("enableProjectBatchImport", "\u542F\u7528\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165", "Enable project batch import", "\u4FDD\u7559\u201C\u6574\u5DE5\u7A0B\u6279\u91CF\u5BFC\u5165\u201D\u5165\u53E3\uFF0C\u53EF\u540C\u6B65\u5F53\u524D\u5DE5\u7A0B\u4E0B\u5168\u90E8 PCB\u3002", "Keep the batch-import action to sync all PCB under the current project.")}${toggleRow("enableOpenSourcePcb", "\u542F\u7528\u201C\u6253\u5F00\u5BF9\u5E94 PCB\u201D", "Enable open source PCB action", "\u5728\u9879\u76EE\u9875\u4E3A\u5DF2\u5173\u8054\u5BBF\u4E3B PCB \u7684\u8BB0\u5F55\u663E\u793A\u201C\u4E00\u952E\u6253\u5F00\u5BF9\u5E94 PCB\u201D\u3002", "Show the one-click open action for PCB entries linked to JLCEDA documents.")}${toggleRow("enableReportsView", "\u542F\u7528\u62A5\u544A\u9875\u9762", "Enable reports view", "\u663E\u793A\u5DE5\u7A0B\u5FEB\u7167\u3001\u62A5\u544A\u5386\u53F2\u4EE5\u53CA\u62A5\u544A\u5BFC\u51FA\u80FD\u529B\u3002", "Show engineering reports, history, and report export actions.")}${toggleRow("enableExportHub", "\u542F\u7528\u5BFC\u51FA\u4E2D\u5FC3", "Enable export hub", "\u663E\u793A\u5236\u9020\u5BFC\u51FA\u4E2D\u5FC3\uFF0C\u7EDF\u4E00\u5BFC\u51FA BOM/Gerber/\u5750\u6807/3D/\u7F51\u8868\u7B49\u8D44\u6599\u3002", "Show the manufacture export hub for BOM, Gerber, Pick&Place, 3D, and netlist outputs.")}${toggleRow("enableCanvasTools", "\u542F\u7528\u753B\u5E03\u5DE5\u5177", "Enable canvas tools", "\u663E\u793A\u9002\u5E94\u3001\u6846\u9009\u3001\u622A\u56FE\u7B49\u753B\u5E03\u8F85\u52A9\u52A8\u4F5C\u3002", "Show fit, marker, and capture tools for the active canvas.")}${toggleRow("autoLoadEdaSnapshot", "\u542F\u52A8\u65F6\u81EA\u52A8\u8BFB\u53D6\u5DE5\u7A0B\u5FEB\u7167", "Auto load snapshot on startup", "\u63D2\u4EF6\u6253\u5F00\u65F6\u81EA\u52A8\u5C1D\u8BD5\u8BFB\u53D6\u5F53\u524D\u5DE5\u7A0B\u4E0A\u4E0B\u6587\uFF1B\u5931\u8D25\u65F6\u53EF\u624B\u52A8\u5237\u65B0\u3002", "Try to read the current design context when the plugin opens; you can still refresh manually if it fails.")}<div class="subsection-head"><h3>${e(t("\u9875\u9762\u529F\u80FD", "Views"))}</h3></div>${toggleRow("enablePurchaseView", "\u542F\u7528\u91C7\u8D2D\u6E05\u5355\u9875\u9762", "Enable purchase view", "\u663E\u793A\u91C7\u8D2D\u6E05\u5355\u5BFC\u822A\u3001\u5FEB\u6377\u5165\u53E3\u548C\u5BFC\u51FA\u80FD\u529B\u3002", "Show the purchase list page, shortcuts and export actions.")}${toggleRow("enableStoresView", "\u542F\u7528\u5E97\u94FA\u9875\u9762", "Enable stores view", "\u663E\u793A\u5E97\u94FA\u7EF4\u62A4\u9875\u9762\uFF0C\u4FBF\u4E8E\u7BA1\u7406\u4F9B\u5E94\u5546\u4E0E\u91C7\u8D2D\u8BB0\u5F55\u3002", "Show the stores page for supplier and purchase-record management.")}<button class="primary-button" type="submit">${e(t("\u4FDD\u5B58\u504F\u597D", "Save"))}</button></form></article><article class="panel-card"><h2>${e(t("\u63D2\u4EF6\u5B58\u50A8", "Plugin Storage"))}</h2><ul class="info-list"><li>${e(t(`\u5F53\u524D\u5171 ${state.db.types.length} \u4E2A\u7C7B\u578B\u3001${state.db.components.length} \u4E2A\u5143\u5668\u4EF6\u3001${state.db.projects.length} \u4E2A\u9879\u76EE\u3002`, `Current totals: ${state.db.types.length} types, ${state.db.components.length} components, ${state.db.projects.length} projects.`))}</li><li>${e(t(`\u5DF2\u8BB0\u5F55 ${state.reportHistory.length} \u6761\u5DE5\u7A0B\u62A5\u544A/\u5BFC\u51FA\u5386\u53F2\u3002`, `Stored ${state.reportHistory.length} report/export history entries.`))}</li><li>${e(t("\u7A97\u53E3\u6807\u9898\u680F\u5DF2\u652F\u6301\u6700\u5927\u5316\u4E0E\u6700\u5C0F\u5316\uFF1B\u7A97\u53E3\u6700\u5C0F\u5316\u540E\uFF0C\u518D\u70B9\u51FB\u63D2\u4EF6\u83DC\u5355\u53EF\u6062\u590D\u3002", "The window title bar now supports maximize and minimize. Click the plugin menu again to restore a minimized window."))}</li></ul><div class="inline-actions"><button class="ghost-button" data-action="import">${e(t("\u5BFC\u5165", "Import"))}</button><button class="ghost-button" data-action="export-json">${e(t("\u5BFC\u51FA JSON", "Export JSON"))}</button><button class="ghost-button" data-action="export-xlsx">${e(t("\u5BFC\u51FA Excel(.xlsx)", "Export Excel (.xlsx)"))}</button><button class="ghost-button" data-action="view" data-view="reports">${e(t("\u67E5\u770B\u62A5\u544A", "Open Reports"))}</button><button class="danger-button" data-action="reset">${e(t("\u91CD\u7F6E\u6570\u636E", "Reset Data"))}</button></div></article></section>`;
   }
   function modal() {
     if (!state.modal) return "";
@@ -2233,6 +2621,12 @@
     setStatus("success", t("\u5E97\u94FA\u8BC4\u4EF7\u5DF2\u5220\u9664\u3002", "Store deleted."));
     render();
   }
+  async function deleteReport(idValue) {
+    state.reportHistory = state.reportHistory.filter((item) => item.id !== idValue);
+    await saveReportHistory();
+    setStatus("success", t("\u62A5\u544A\u8BB0\u5F55\u5DF2\u5220\u9664\u3002", "Report entry deleted."));
+    render();
+  }
   app.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -2299,6 +2693,20 @@
           return;
         }
         if (action === "refresh-eda-snapshot") return refreshCurrentEdaSnapshot();
+        if (action === "generate-context-report") return generateContextReport();
+        if (action === "capture-canvas-current") return captureCanvas("current");
+        if (action === "capture-canvas-all") return captureCanvas("all");
+        if (action === "capture-canvas-selected") return captureCanvas("selected");
+        if (action === "zoom-canvas-all") return focusCanvas("all");
+        if (action === "zoom-canvas-selected") return focusCanvas("selected");
+        if (action === "mark-canvas-all") return showCanvasMarker("all");
+        if (action === "mark-canvas-selected") return showCanvasMarker("selected");
+        if (action === "clear-canvas-markers") return clearCanvasMarkers();
+        if (action === "clear-report-history") return clearReportHistory();
+        if (action === "export-report-json") return exportStoredReport(target.dataset.reportId, "json");
+        if (action === "export-report-html") return exportStoredReport(target.dataset.reportId, "html");
+        if (action === "delete-report") return deleteReport(target.dataset.reportId);
+        if (action === "export-manufacture") return exportManufactureAsset(target.dataset.kind);
         if (action === "import-eda-project-bom") return importAllEdaPcbsFromCurrentProject();
         if (action === "import") return importData();
         if (action === "import-eda-bom") return importEdaBomFromCurrent();
@@ -2419,6 +2827,9 @@
               enableOpenSourcePcb: checked("enableOpenSourcePcb"),
               enablePurchaseView: checked("enablePurchaseView"),
               enableStoresView: checked("enableStoresView"),
+              enableReportsView: checked("enableReportsView"),
+              enableExportHub: checked("enableExportHub"),
+              enableCanvasTools: checked("enableCanvasTools"),
               autoLoadEdaSnapshot: checked("autoLoadEdaSnapshot")
             }
           });
@@ -2434,6 +2845,22 @@
             }
           }
           setStatus("success", t("\u504F\u597D\u5DF2\u4FDD\u5B58\u3002", "Preferences saved."));
+          render();
+          return;
+        }
+        if (form.id === "export-prefs-form") {
+          state.exportPrefs = normalizeExportPrefs({
+            bomFileType: values.bomFileType,
+            pickPlaceFileType: values.pickPlaceFileType,
+            modelFileType: values.modelFileType,
+            modelMode: values.modelMode,
+            reportHistoryLimit: values.reportHistoryLimit,
+            gerberColorSilkscreen: Object.prototype.hasOwnProperty.call(values, "gerberColorSilkscreen"),
+            autoGenerateModels: Object.prototype.hasOwnProperty.call(values, "autoGenerateModels")
+          });
+          await saveExportPrefs();
+          await saveReportHistory();
+          setStatus("success", t("\u5BFC\u51FA\u9884\u8BBE\u5DF2\u4FDD\u5B58\u3002", "Export presets saved."));
           render();
           return;
         }

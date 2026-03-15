@@ -12,11 +12,13 @@
  */
 import * as extensionConfig from '../extension.json';
 
-const BOM_IFRAME_ID = 'bom-manager-main';
-const BOM_IFRAME_TITLE = '物料管理助手';
-const BOM_IFRAME_STATE_KEY = 'bom-manager-window-state';
-const BOM_IFRAME_SIZE_HINT_KEY = 'bom-manager-window-size-hint';
-const BOM_IFRAME_DEFAULT_SIZE = { width: 1920, height: 1200 };
+const DESIGN_PULSE_IFRAME_ID = 'design-pulse-main';
+const DESIGN_PULSE_IFRAME_TITLE = '工程脉搏';
+const DESIGN_PULSE_IFRAME_STATE_KEY = 'design-pulse-window-state';
+const LEGACY_IFRAME_STATE_KEY = 'bom-manager-window-state';
+const DESIGN_PULSE_IFRAME_SIZE_HINT_KEY = 'design-pulse-window-size-hint';
+const LEGACY_IFRAME_SIZE_HINT_KEY = 'bom-manager-window-size-hint';
+const DESIGN_PULSE_IFRAME_DEFAULT_SIZE = { width: 1920, height: 1200 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function activate(status?: 'onStartupFinished', arg?: string): void {}
@@ -30,8 +32,8 @@ function normalizeWindowSize(input: unknown): { width: number; height: number } 
 	const width = Number(raw.width);
 	const height = Number(raw.height);
 	return {
-		width: Number.isFinite(width) && width >= 1200 ? Math.round(width) : BOM_IFRAME_DEFAULT_SIZE.width,
-		height: Number.isFinite(height) && height >= 760 ? Math.round(height) : BOM_IFRAME_DEFAULT_SIZE.height,
+		width: Number.isFinite(width) && width >= 1200 ? Math.round(width) : DESIGN_PULSE_IFRAME_DEFAULT_SIZE.width,
+		height: Number.isFinite(height) && height >= 760 ? Math.round(height) : DESIGN_PULSE_IFRAME_DEFAULT_SIZE.height,
 	};
 }
 
@@ -50,19 +52,30 @@ function getRuntimeWindowSizeHint(): { width: number; height: number } | null {
 	}
 }
 
+function readConfig(storageApi: any, primaryKey: string, legacyKey?: string): unknown {
+	try {
+		const primary = storageApi?.getExtensionUserConfig?.(primaryKey);
+		if (typeof primary !== 'undefined' && primary !== null) return primary;
+		if (legacyKey) return storageApi?.getExtensionUserConfig?.(legacyKey);
+		return undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function getPreferredWindowSize(storageApi: any): { width: number; height: number } {
 	const runtimeHint = getRuntimeWindowSizeHint();
 	if (runtimeHint) return runtimeHint;
 	try {
-		return normalizeWindowSize(storageApi?.getExtensionUserConfig?.(BOM_IFRAME_SIZE_HINT_KEY));
+		return normalizeWindowSize(readConfig(storageApi, DESIGN_PULSE_IFRAME_SIZE_HINT_KEY, LEGACY_IFRAME_SIZE_HINT_KEY));
 	} catch {
-		return BOM_IFRAME_DEFAULT_SIZE;
+		return DESIGN_PULSE_IFRAME_DEFAULT_SIZE;
 	}
 }
 
 async function writeWindowState(storageApi: any, state: 'normal' | 'maximized' | 'minimized' | 'closed'): Promise<void> {
 	try {
-		await storageApi?.setExtensionUserConfig?.(BOM_IFRAME_STATE_KEY, state);
+		await storageApi?.setExtensionUserConfig?.(DESIGN_PULSE_IFRAME_STATE_KEY, state);
 	} catch {}
 }
 
@@ -101,7 +114,7 @@ export async function openBomManager(): Promise<void> {
 				`版本：${envInfo.editorVersion || '未知'}\n` +
 				`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
 				`请升级嘉立创 EDA 专业版后重试。`,
-			BOM_IFRAME_TITLE,
+			DESIGN_PULSE_IFRAME_TITLE,
 		);
 		return;
 	}
@@ -109,26 +122,26 @@ export async function openBomManager(): Promise<void> {
 	// Your client (3.2.91) can open the compat page reliably, while the default page may fail to render.
 	// So we only open the compat page by default to avoid duplicate windows and blank renders.
 	const requestTs = Date.now();
-	const windowState = normalizeWindowState(storageApi?.getExtensionUserConfig?.(BOM_IFRAME_STATE_KEY));
+	const windowState = normalizeWindowState(readConfig(storageApi, DESIGN_PULSE_IFRAME_STATE_KEY, LEGACY_IFRAME_STATE_KEY));
 	const preferredSize = getPreferredWindowSize(storageApi);
 	try {
-		await storageApi?.setExtensionUserConfig?.('bom-manager-open-request-ts', requestTs);
+		await storageApi?.setExtensionUserConfig?.('design-pulse-open-request-ts', requestTs);
 	} catch {}
 
 	try {
 		if (windowState !== 'minimized' && typeof iframeApi.showIFrame === 'function') {
-			const restored = await iframeApi.showIFrame(BOM_IFRAME_ID);
+			const restored = await iframeApi.showIFrame(DESIGN_PULSE_IFRAME_ID);
 			if (restored) return;
 		}
 	} catch {}
 
 	try {
 		if (typeof iframeApi.closeIFrame === 'function') {
-			await iframeApi.closeIFrame(BOM_IFRAME_ID).catch(() => false);
+			await iframeApi.closeIFrame(DESIGN_PULSE_IFRAME_ID).catch(() => false);
 		}
 
 		// NOTE: some builds return false even when the window opens. We don't treat false as failure.
-		void iframeApi.openIFrame('/iframe/index.abs.html', preferredSize.width, preferredSize.height, BOM_IFRAME_ID, {
+		void iframeApi.openIFrame('/iframe/index.abs.html', preferredSize.width, preferredSize.height, DESIGN_PULSE_IFRAME_ID, {
 			maximizeButton: true,
 			minimizeButton: true,
 			buttonCallbackFn: (button) => {
@@ -152,7 +165,7 @@ export async function openBomManager(): Promise<void> {
 					`编译日期：${envInfo.compiledDate || '未知'}\n\n` +
 					`错误：${finalError instanceof Error ? `${finalError.name}: ${finalError.message}` : String(finalError)}\n\n` +
 					`建议：请先使用“环境自检”确认资源可读；若仍失败，建议升级 EDA 后重试。`,
-				BOM_IFRAME_TITLE,
+				DESIGN_PULSE_IFRAME_TITLE,
 			);
 		}
 	}
@@ -200,6 +213,8 @@ export async function selfCheck(): Promise<void> {
 		const boardApi = (eda as any)?.dmt_Board;
 		const editorControlApi = (eda as any)?.dmt_EditorControl;
 		const selectControlApi = (eda as any)?.dmt_SelectControl;
+		const teamApi = (eda as any)?.dmt_Team;
+		const workspaceApi = (eda as any)?.dmt_Workspace;
 		const pcbManufactureApi = (eda as any)?.pcb_ManufactureData;
 		const schManufactureApi = (eda as any)?.sch_ManufactureData;
 		return {
@@ -230,12 +245,27 @@ export async function selfCheck(): Promise<void> {
 			activateDocument: has(editorControlApi && typeof editorControlApi.activateDocument === 'function'),
 			closeDocument: has(editorControlApi && typeof editorControlApi.closeDocument === 'function'),
 			getSplitScreenTree: has(editorControlApi && typeof editorControlApi.getSplitScreenTree === 'function'),
+			getCurrentRenderedAreaImage: has(editorControlApi && typeof editorControlApi.getCurrentRenderedAreaImage === 'function'),
+			zoomToAllPrimitives: has(editorControlApi && typeof editorControlApi.zoomToAllPrimitives === 'function'),
+			zoomToSelectedPrimitives: has(editorControlApi && typeof editorControlApi.zoomToSelectedPrimitives === 'function'),
+			generateIndicatorMarkers: has(editorControlApi && typeof editorControlApi.generateIndicatorMarkers === 'function'),
+			removeIndicatorMarkers: has(editorControlApi && typeof editorControlApi.removeIndicatorMarkers === 'function'),
 			dmt_SelectControl: has(selectControlApi),
 			getCurrentDocumentInfo: has(selectControlApi && typeof selectControlApi.getCurrentDocumentInfo === 'function'),
+			dmt_Team: has(teamApi),
+			getCurrentTeamInfo: has(teamApi && typeof teamApi.getCurrentTeamInfo === 'function'),
+			dmt_Workspace: has(workspaceApi),
+			getCurrentWorkspaceInfo: has(workspaceApi && typeof workspaceApi.getCurrentWorkspaceInfo === 'function'),
 			pcb_ManufactureData: has(pcbManufactureApi),
 			pcbGetBomFile: has(pcbManufactureApi && typeof pcbManufactureApi.getBomFile === 'function'),
+			pcbGetGerberFile: has(pcbManufactureApi && typeof pcbManufactureApi.getGerberFile === 'function'),
+			pcbGetPickAndPlaceFile: has(pcbManufactureApi && typeof pcbManufactureApi.getPickAndPlaceFile === 'function'),
+			pcbGet3DFile: has(pcbManufactureApi && typeof pcbManufactureApi.get3DFile === 'function'),
+			pcbGetTestPointFile: has(pcbManufactureApi && typeof pcbManufactureApi.getTestPointFile === 'function'),
+			pcbGetNetlistFile: has(pcbManufactureApi && typeof pcbManufactureApi.getNetlistFile === 'function'),
 			sch_ManufactureData: has(schManufactureApi),
 			schGetBomFile: has(schManufactureApi && typeof schManufactureApi.getBomFile === 'function'),
+			schGetNetlistFile: has(schManufactureApi && typeof schManufactureApi.getNetlistFile === 'function'),
 		};
 	})();
 
@@ -266,21 +296,21 @@ export async function selfCheck(): Promise<void> {
 
 	const lastBoot = (() => {
 		try {
-			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-boot');
+			return readConfig((eda as any)?.sys_Storage, 'design-pulse-last-boot', 'bom-manager-last-boot');
 		} catch {
 			return undefined;
 		}
 	})();
 	const lastErrorInfo = (() => {
 		try {
-			return (eda as any)?.sys_Storage?.getExtensionUserConfig?.('bom-manager-last-error');
+			return readConfig((eda as any)?.sys_Storage, 'design-pulse-last-error', 'bom-manager-last-error');
 		} catch {
 			return undefined;
 		}
 	})();
 
 	const lines: string[] = [];
-	lines.push(`[物料管理助手 SelfCheck] v${extensionConfig.version}`);
+	lines.push(`[工程脉搏 SelfCheck] v${extensionConfig.version}`);
 	lines.push(`env: isClient=${String(envInfo.isClient)} isWeb=${String(envInfo.isWeb)}`);
 	lines.push(
 		`mode: online=${String(envInfo.isOnlineMode)} halfOffline=${String(envInfo.isHalfOfflineMode)} offline=${String(envInfo.isOfflineMode)}`,
@@ -307,7 +337,7 @@ export async function selfCheck(): Promise<void> {
 
 export function about(): void {
 	eda.sys_Dialog.showInformationMessage(
-		`物料管理助手 v${extensionConfig.version}\n\n已迁移为嘉立创 EDA 插件内联应用，可在插件窗口中管理类型、元器件、采购记录、项目、PCB 与 BOM。`,
-		'关于物料管理助手',
+		`工程脉搏 v${extensionConfig.version}\n\n面向嘉立创 EDA 的工程快照、制造导出、画布快照与 BOM 协作助手。`,
+		'关于工程脉搏',
 	);
 }

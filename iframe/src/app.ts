@@ -8,10 +8,22 @@
 (function () {
 	const app = document.getElementById('app');
 	const edaApi = window.eda || (window.parent && window.parent.eda) || (window.top && window.top.eda);
-	const DB_KEY = 'bom-manager-db';
-	const PREFS_KEY = 'bom-manager-prefs';
-	const WINDOW_STATE_KEY = 'bom-manager-window-state';
-	const WINDOW_SIZE_HINT_KEY = 'bom-manager-window-size-hint';
+	const DB_KEY = 'design-pulse-db';
+	const LEGACY_DB_KEY = 'bom-manager-db';
+	const PREFS_KEY = 'design-pulse-prefs';
+	const LEGACY_PREFS_KEY = 'bom-manager-prefs';
+	const REPORT_HISTORY_KEY = 'design-pulse-report-history';
+	const EXPORT_PREFS_KEY = 'design-pulse-export-prefs';
+	const WINDOW_STATE_KEY = 'design-pulse-window-state';
+	const LEGACY_WINDOW_STATE_KEY = 'bom-manager-window-state';
+	const WINDOW_SIZE_HINT_KEY = 'design-pulse-window-size-hint';
+	const LEGACY_WINDOW_SIZE_HINT_KEY = 'bom-manager-window-size-hint';
+	const LAST_ERROR_KEY = 'design-pulse-last-error';
+	const LEGACY_LAST_ERROR_KEY = 'bom-manager-last-error';
+	const LAST_BOOT_KEY = 'design-pulse-last-boot';
+	const LEGACY_LAST_BOOT_KEY = 'bom-manager-last-boot';
+	const LAST_BOOT_TS_KEY = 'design-pulse-last-boot-ts';
+	const LEGACY_LAST_BOOT_TS_KEY = 'bom-manager-last-boot-ts';
 
 	if (!app) return;
 	if (!edaApi) {
@@ -49,7 +61,7 @@
 		const writeLastError = (payload) => {
 			try {
 				if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
-					void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-error', payload);
+					void edaApi.sys_Storage.setExtensionUserConfig(LAST_ERROR_KEY, payload);
 				}
 			} catch (_e) {}
 		};
@@ -106,20 +118,20 @@
 				viewportWidth: Math.max(0, Math.round(window.innerWidth || 0)),
 				viewportHeight: Math.max(0, Math.round(window.innerHeight || 0)),
 			};
-			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot-ts', now);
-			void edaApi.sys_Storage.setExtensionUserConfig('bom-manager-last-boot', bootInfo);
+			void edaApi.sys_Storage.setExtensionUserConfig(LAST_BOOT_TS_KEY, now);
+			void edaApi.sys_Storage.setExtensionUserConfig(LAST_BOOT_KEY, bootInfo);
 			void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, 'normal');
 			persistWindowSizeHint();
 		}
 
 		if (edaApi.sys_MessageBus && typeof edaApi.sys_MessageBus.publish === 'function') {
-			edaApi.sys_MessageBus.publish('bom-manager-ready', { ts: now });
+			edaApi.sys_MessageBus.publish('design-pulse-ready', { ts: now });
 		}
 
 		// Also log boot info when possible (helps when users only have log panel).
 		try {
 			edaApi.sys_Log?.add?.(
-				`[bom-manager iframe] boot ok ts=${now} baseURI=${String(document?.baseURI || '')}`,
+				`[design-pulse iframe] boot ok ts=${now} baseURI=${String(document?.baseURI || '')}`,
 				'info',
 			);
 		} catch (_e) {}
@@ -145,7 +157,9 @@
 		status: '',
 		statusKind: 'info',
 		prefs: loadPrefs(),
+		exportPrefs: loadExportPrefs(),
 		db: loadDb(),
+		reportHistory: loadReportHistory(),
 		componentFilter: { keyword: '', typeId: 'all', warningOnly: false },
 		projectFilter: 'all',
 		purchase: {
@@ -169,6 +183,17 @@
 	}
 	function iso() {
 		return new Date().toISOString();
+	}
+	function loadUserConfig(primaryKey, legacyKey, fallbackValue) {
+		try {
+			const primary = edaApi.sys_Storage.getExtensionUserConfig(primaryKey);
+			if (typeof primary !== 'undefined' && primary !== null) return primary;
+			if (legacyKey) {
+				const legacy = edaApi.sys_Storage.getExtensionUserConfig(legacyKey);
+				if (typeof legacy !== 'undefined' && legacy !== null) return legacy;
+			}
+		} catch (_error) {}
+		return fallbackValue;
 	}
 	function t(zh, en) {
 		return state.prefs.lang === 'en' ? en : zh;
@@ -331,7 +356,21 @@
 			enableOpenSourcePcb: true,
 			enablePurchaseView: true,
 			enableStoresView: true,
+			enableReportsView: true,
+			enableExportHub: true,
+			enableCanvasTools: true,
 			autoLoadEdaSnapshot: false,
+		};
+	}
+	function defaultExportPrefs() {
+		return {
+			bomFileType: 'xlsx',
+			pickPlaceFileType: 'xlsx',
+			modelFileType: 'step',
+			modelMode: 'Outfit',
+			gerberColorSilkscreen: false,
+			autoGenerateModels: true,
+			reportHistoryLimit: 8,
 		};
 	}
 	function normalizePrefs(input) {
@@ -348,27 +387,77 @@
 			features,
 		};
 	}
+	function normalizeExportPrefs(input) {
+		const raw = input && typeof input === 'object' ? input : {};
+		const defaults = defaultExportPrefs();
+		return {
+			bomFileType: raw?.bomFileType === 'csv' ? 'csv' : defaults.bomFileType,
+			pickPlaceFileType: raw?.pickPlaceFileType === 'csv' ? 'csv' : defaults.pickPlaceFileType,
+			modelFileType: raw?.modelFileType === 'obj' ? 'obj' : defaults.modelFileType,
+			modelMode: raw?.modelMode === 'Parts' ? 'Parts' : defaults.modelMode,
+			gerberColorSilkscreen: typeof raw?.gerberColorSilkscreen === 'boolean' ? raw.gerberColorSilkscreen : defaults.gerberColorSilkscreen,
+			autoGenerateModels: typeof raw?.autoGenerateModels === 'boolean' ? raw.autoGenerateModels : defaults.autoGenerateModels,
+			reportHistoryLimit: Number.isFinite(Number(raw?.reportHistoryLimit)) ? Math.max(3, Math.min(20, Number(raw.reportHistoryLimit))) : defaults.reportHistoryLimit,
+		};
+	}
+	function normalizeReportHistory(input) {
+		return Array.isArray(input) ? input.filter((item) => item && typeof item === 'object') : [];
+	}
 
 	function loadPrefs() {
 		try {
-			return normalizePrefs(edaApi.sys_Storage.getExtensionUserConfig(PREFS_KEY));
+			return normalizePrefs(loadUserConfig(PREFS_KEY, LEGACY_PREFS_KEY));
 		} catch (_error) {
 			return normalizePrefs();
 		}
 	}
+	function loadExportPrefs() {
+		try {
+			return normalizeExportPrefs(loadUserConfig(EXPORT_PREFS_KEY, null));
+		} catch (_error) {
+			return normalizeExportPrefs();
+		}
+	}
 	function loadDb() {
 		try {
-			return nDb(edaApi.sys_Storage.getExtensionUserConfig(DB_KEY) || defaultDb());
+			return nDb(loadUserConfig(DB_KEY, LEGACY_DB_KEY, defaultDb()) || defaultDb());
 		} catch (_error) {
 			return defaultDb();
+		}
+	}
+	function loadReportHistory() {
+		try {
+			return normalizeReportHistory(loadUserConfig(REPORT_HISTORY_KEY, null, []));
+		} catch (_error) {
+			return [];
 		}
 	}
 	async function savePrefs() {
 		await edaApi.sys_Storage.setExtensionUserConfig(PREFS_KEY, state.prefs);
 	}
+	async function saveExportPrefs() {
+		state.exportPrefs = normalizeExportPrefs(state.exportPrefs);
+		await edaApi.sys_Storage.setExtensionUserConfig(EXPORT_PREFS_KEY, state.exportPrefs);
+	}
 	async function saveDb() {
 		state.db = nDb(state.db);
 		await edaApi.sys_Storage.setExtensionUserConfig(DB_KEY, state.db);
+	}
+	async function saveReportHistory() {
+		const limit = Number(state.exportPrefs?.reportHistoryLimit || defaultExportPrefs().reportHistoryLimit);
+		state.reportHistory = normalizeReportHistory(state.reportHistory).slice(0, limit);
+		await edaApi.sys_Storage.setExtensionUserConfig(REPORT_HISTORY_KEY, state.reportHistory);
+	}
+	async function pushReport(entry) {
+		state.reportHistory = [
+			{
+				id: entry.id || id(),
+				createdAt: entry.createdAt || iso(),
+				...entry,
+			},
+			...normalizeReportHistory(state.reportHistory),
+		].slice(0, Number(state.exportPrefs?.reportHistoryLimit || defaultExportPrefs().reportHistoryLimit));
+		await saveReportHistory();
 	}
 
 	function projectDisplayNameFromSnapshot(snapshot) {
@@ -384,6 +473,9 @@
 		const projectApi = edaApi?.dmt_Project;
 		const pcbApi = edaApi?.dmt_Pcb;
 		const boardApi = edaApi?.dmt_Board;
+		const selectApi = edaApi?.dmt_SelectControl;
+		const teamApi = edaApi?.dmt_Team;
+		const workspaceApi = edaApi?.dmt_Workspace;
 		const call = async (owner, method) => {
 			if (!owner || typeof owner[method] !== 'function') return undefined;
 			try {
@@ -392,16 +484,19 @@
 				return undefined;
 			}
 		};
-		const [project, pcb, board] = await Promise.all([
+		const [project, pcb, board, documentInfo, teamInfo, workspaceInfo] = await Promise.all([
 			call(projectApi, 'getCurrentProjectInfo'),
 			call(pcbApi, 'getCurrentPcbInfo'),
 			call(boardApi, 'getCurrentBoardInfo'),
+			call(selectApi, 'getCurrentDocumentInfo'),
+			call(teamApi, 'getCurrentTeamInfo'),
+			call(workspaceApi, 'getCurrentWorkspaceInfo'),
 		]);
-		if (!project && !pcb && !board) {
+		if (!project && !pcb && !board && !documentInfo) {
 			throw new Error(
 				t(
-					'未读取到当前工程上下文。请先切换到已打开的原理图或 PCB 画布后重试；若仍失败，请在“环境自检”中确认 dmt_Project / dmt_Pcb / dmt_Board 可用。',
-					'Cannot read the current design context. Focus an opened schematic or PCB canvas and retry. If it still fails, verify dmt_Project / dmt_Pcb / dmt_Board in SelfCheck.',
+					'未读取到当前工程上下文。请先切换到已打开的原理图或 PCB 画布后重试；若仍失败，请在“环境自检”中确认 dmt_Project / dmt_Pcb / dmt_Board / dmt_SelectControl 可用。',
+					'Cannot read the current design context. Focus an opened schematic or PCB canvas and retry. If it still fails, verify dmt_Project / dmt_Pcb / dmt_Board / dmt_SelectControl in SelfCheck.',
 				),
 			);
 		}
@@ -418,6 +513,15 @@
 			boardName: String(board?.name || '').trim(),
 			schematicUuid: String(board?.schematic?.uuid || '').trim(),
 			schematicName: String(board?.schematic?.name || '').trim(),
+			currentDocumentType: String(documentInfo?.documentType || '').trim(),
+			currentDocumentUuid: String(documentInfo?.uuid || '').trim(),
+			currentTabId: String(documentInfo?.tabId || '').trim(),
+			currentDocumentProjectUuid: String(documentInfo?.parentProjectUuid || '').trim(),
+			teamName: String(teamInfo?.name || '').trim(),
+			teamUuid: String(teamInfo?.uuid || '').trim(),
+			teamIdentity: Number.isFinite(Number(teamInfo?.identity)) ? Number(teamInfo.identity) : '',
+			workspaceName: String(workspaceInfo?.name || '').trim(),
+			workspaceUuid: String(workspaceInfo?.uuid || '').trim(),
 		};
 	}
 	async function refreshCurrentEdaSnapshot(options) {
@@ -434,6 +538,277 @@
 			render();
 		}
 	}
+	function safeFilePart(value, fallbackValue) {
+		const normalized = String(value || '')
+			.replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
+			.replace(/\s+/g, '-')
+			.replace(/-+/g, '-')
+			.replace(/^-|-$/g, '')
+			.trim();
+		return normalized || fallbackValue;
+	}
+	function makeTimestampToken() {
+		return iso().replaceAll(':', '').replaceAll('.', '').replace('T', '-').replace('Z', '');
+	}
+	async function ensureSnapshot() {
+		if (state.edaSnapshot) return state.edaSnapshot;
+		return refreshCurrentEdaSnapshot({ silent: true });
+	}
+	async function getCurrentDocumentInfoSafe() {
+		const selectApi = edaApi?.dmt_SelectControl;
+		if (!selectApi || typeof selectApi.getCurrentDocumentInfo !== 'function') return null;
+		return (await selectApi.getCurrentDocumentInfo().catch(() => undefined)) || null;
+	}
+	function reportCounts() {
+		return {
+			types: state.db.types.length,
+			components: state.db.components.length,
+			warnings: state.db.components.filter(warning).length,
+			projects: state.db.projects.length,
+			pcbs: state.db.pcbs.length,
+			bomItems: state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0),
+		};
+	}
+	function reportTitle(kind, snapshot, extra) {
+		const projectLabel = projectDisplayNameFromSnapshot(snapshot) || t('当前工程', 'Current Design');
+		if (extra?.title) return extra.title;
+		if (kind === 'context') return t(`工程快照报告 · ${projectLabel}`, `Context Report · ${projectLabel}`);
+		if (kind === 'capture') return t(`画布快照 · ${projectLabel}`, `Canvas Capture · ${projectLabel}`);
+		if (kind === 'export') return t(`制造导出 · ${projectLabel}`, `Manufacture Export · ${projectLabel}`);
+		return t(`设计记录 · ${projectLabel}`, `Design Record · ${projectLabel}`);
+	}
+	function buildContextReport(kind, extra) {
+		const snapshot = extra?.snapshot || state.edaSnapshot || null;
+		return {
+			id: id(),
+			kind,
+			title: reportTitle(kind, snapshot, extra),
+			createdAt: iso(),
+			snapshot,
+			counts: reportCounts(),
+			exportKind: extra?.exportKind || '',
+			fileName: extra?.fileName || '',
+			captureStrategy: extra?.captureStrategy || '',
+			notes: extra?.notes || '',
+			region: extra?.region || null,
+		};
+	}
+	function reportKindText(kind) {
+		if (kind === 'export') return t('制造导出', 'Manufacture Export');
+		if (kind === 'capture') return t('画布快照', 'Canvas Capture');
+		return t('工程报告', 'Design Report');
+	}
+	function reportHtml(report) {
+		const snapshot = report?.snapshot || {};
+		const counts = report?.counts || {};
+		const rows = [
+			[t('工程', 'Project'), projectDisplayNameFromSnapshot(snapshot) || '-'],
+			[t('当前 PCB', 'Current PCB'), pcbDisplayNameFromSnapshot(snapshot) || '-'],
+			[t('当前板子', 'Current Board'), boardDisplayNameFromSnapshot(snapshot) || '-'],
+			[t('当前文档类型', 'Document Type'), snapshot?.currentDocumentType || '-'],
+			[t('团队', 'Team'), snapshot?.teamName || '-'],
+			[t('工作区', 'Workspace'), snapshot?.workspaceName || '-'],
+			[t('元器件', 'Components'), counts.components ?? 0],
+			[t('库存预警', 'Warnings'), counts.warnings ?? 0],
+			[t('项目数', 'Projects'), counts.projects ?? 0],
+			[t('PCB 数', 'PCBs'), counts.pcbs ?? 0],
+			[t('BOM 明细', 'BOM Items'), counts.bomItems ?? 0],
+			[t('文件名', 'File Name'), report?.fileName || '-'],
+			[t('备注', 'Notes'), report?.notes || '-'],
+		];
+		return `<!doctype html><html><head><meta charset="utf-8" /><title>${e(report?.title || 'Design Pulse Report')}</title><style>body{font-family:"Segoe UI","Microsoft YaHei",sans-serif;padding:24px;color:#182334}h1{margin:0 0 8px}p{color:#5b6b84}table{border-collapse:collapse;width:100%;margin-top:18px}th,td{border:1px solid #dbe3f0;padding:8px 10px;text-align:left}th{width:220px;background:#f5f8ff}pre{margin-top:18px;padding:14px;background:#f6f8fb;border:1px solid #dbe3f0;border-radius:12px;white-space:pre-wrap;word-break:break-word}</style></head><body><h1>${e(report?.title || 'Design Pulse Report')}</h1><p>${e(`${reportKindText(report?.kind)} · ${time(report?.createdAt)}`)}</p><table>${rows.map((row) => `<tr><th>${e(row[0])}</th><td>${e(row[1])}</td></tr>`).join('')}</table><pre>${e(JSON.stringify(report, null, 2))}</pre></body></html>`;
+	}
+	async function saveBlobFile(fileData, fileName) {
+		await edaApi.sys_FileSystem.saveFile(fileData, fileName);
+	}
+	function snapshotStem(snapshot, suffix) {
+		return [
+			safeFilePart(projectDisplayNameFromSnapshot(snapshot), 'project'),
+			safeFilePart(pcbDisplayNameFromSnapshot(snapshot), 'pcb'),
+			safeFilePart(suffix, 'asset'),
+			makeTimestampToken(),
+		].join('_');
+	}
+	async function exportStoredReport(reportId, format) {
+		const report = state.reportHistory.find((item) => item.id === reportId) || null;
+		if (!report) throw new Error(t('未找到报告记录。', 'Report entry not found.'));
+		if (format === 'html') {
+			await saveBlobFile(new Blob([reportHtml(report)], { type: 'text/html;charset=utf-8' }), `${safeFilePart(report.title, 'design-pulse-report')}.html`);
+		} else {
+			await saveBlobFile(new Blob([`${JSON.stringify(report, null, 2)}\n`], { type: 'application/json;charset=utf-8' }), `${safeFilePart(report.title, 'design-pulse-report')}.json`);
+		}
+		setStatus('success', t('已导出报告文件。', 'Report exported.'));
+	}
+	async function generateContextReport() {
+		const snapshot = await ensureSnapshot();
+		const report = buildContextReport('context', {
+			snapshot,
+			notes: t('基于当前工程、当前文档、团队与工作区生成。', 'Generated from current design, document, team, and workspace context.'),
+		});
+		await pushReport(report);
+		setStatus('success', t('已生成工程快照报告。', 'Context report generated.'));
+		render();
+	}
+	function regionMarker(region) {
+		return [
+			{
+				type: 'rectangle',
+				left: Number(region?.left || 0),
+				right: Number(region?.right || 0),
+				top: Number(region?.top || 0),
+				bottom: Number(region?.bottom || 0),
+			},
+		];
+	}
+	async function zoomCanvas(strategy) {
+		const editorApi = edaApi?.dmt_EditorControl;
+		const documentInfo = await getCurrentDocumentInfoSafe();
+		if (!editorApi || !documentInfo) throw new Error(t('当前没有可操作的画布文档。', 'No active canvas document.'));
+		const action =
+			strategy === 'selected'
+				? editorApi.zoomToSelectedPrimitives?.bind(editorApi)
+				: editorApi.zoomToAllPrimitives?.bind(editorApi);
+		if (!action) throw new Error(t('当前 EDA 版本不支持该画布缩放接口。', 'Canvas zoom API is unavailable.'));
+		const region = await action(documentInfo.tabId);
+		if (!region) {
+			throw new Error(
+				strategy === 'selected'
+					? t('当前没有可缩放的选中图元。', 'No selected primitives to focus.')
+					: t('当前没有可缩放的图元。', 'No primitives available to focus.'),
+			);
+		}
+		return { documentInfo, region };
+	}
+	async function focusCanvas(strategy) {
+		await zoomCanvas(strategy);
+		setStatus('success', strategy === 'selected' ? t('已适应当前选区。', 'Selection focused.') : t('已适应全部图元。', 'All primitives focused.'));
+	}
+	async function showCanvasMarker(strategy) {
+		const editorApi = edaApi?.dmt_EditorControl;
+		if (!editorApi || typeof editorApi.generateIndicatorMarkers !== 'function') {
+			throw new Error(t('当前 EDA 版本不支持指示标记接口。', 'Indicator marker API is unavailable.'));
+		}
+		const { documentInfo, region } = await zoomCanvas(strategy);
+		const ok = await editorApi.generateIndicatorMarkers(
+			regionMarker(region),
+			{ r: 22, g: 93, b: 255, alpha: 0.9 },
+			12,
+			true,
+			documentInfo.tabId,
+		);
+		if (!ok) throw new Error(t('指示标记生成失败。', 'Failed to create indicator markers.'));
+		setStatus('success', strategy === 'selected' ? t('已框选当前选区。', 'Current selection marked.') : t('已框选当前画布范围。', 'Current canvas area marked.'));
+	}
+	async function clearCanvasMarkers() {
+		const editorApi = edaApi?.dmt_EditorControl;
+		const documentInfo = await getCurrentDocumentInfoSafe();
+		if (!editorApi || typeof editorApi.removeIndicatorMarkers !== 'function' || !documentInfo) {
+			throw new Error(t('当前 EDA 版本不支持清理指示标记。', 'Cannot clear indicator markers in this EDA build.'));
+		}
+		await editorApi.removeIndicatorMarkers(documentInfo.tabId);
+		setStatus('success', t('已清除画布指示标记。', 'Canvas markers cleared.'));
+	}
+	async function captureCanvas(strategy) {
+		const editorApi = edaApi?.dmt_EditorControl;
+		const documentInfo = await getCurrentDocumentInfoSafe();
+		if (!editorApi || typeof editorApi.getCurrentRenderedAreaImage !== 'function' || !documentInfo) {
+			throw new Error(t('当前 EDA 版本不支持画布截图接口。', 'Canvas capture API is unavailable.'));
+		}
+		let region = null;
+		if (strategy === 'all' || strategy === 'selected') {
+			const zoomed = await zoomCanvas(strategy);
+			region = zoomed.region;
+		}
+		const blob = await editorApi.getCurrentRenderedAreaImage(documentInfo.tabId);
+		if (!blob) throw new Error(t('未获取到画布图像。', 'No canvas image returned.'));
+		const snapshot = await ensureSnapshot();
+		const suffix =
+			strategy === 'selected'
+				? t('selected-capture', 'selected-capture')
+				: strategy === 'all'
+					? t('full-capture', 'full-capture')
+					: t('current-view', 'current-view');
+		const fileName = `${snapshotStem(snapshot, suffix)}.png`;
+		await saveBlobFile(blob, fileName);
+		await pushReport(
+			buildContextReport('capture', {
+				snapshot,
+				fileName,
+				captureStrategy: strategy,
+				region,
+				notes:
+					strategy === 'selected'
+						? t('已按当前选区适应并截图。', 'Captured after fitting current selection.')
+						: strategy === 'all'
+							? t('已按全部图元适应并截图。', 'Captured after fitting all primitives.')
+							: t('已截图当前可视区域。', 'Captured current visible area.'),
+			}),
+		);
+		setStatus('success', t(`已导出画布截图：${fileName}`, `Canvas capture exported: ${fileName}`));
+		render();
+	}
+	async function exportManufactureAsset(kind) {
+		const snapshot = await ensureSnapshot();
+		const pcbApi = edaApi?.pcb_ManufactureData;
+		const schApi = edaApi?.sch_ManufactureData;
+		const stem = snapshotStem(snapshot, kind);
+		let file = null;
+		if (kind === 'bom') {
+			const fn =
+				pcbApi && typeof pcbApi.getBomFile === 'function'
+					? pcbApi.getBomFile.bind(pcbApi)
+					: schApi && typeof schApi.getBomFile === 'function'
+						? schApi.getBomFile.bind(schApi)
+						: null;
+			if (!fn) throw new Error(t('当前 EDA 版本不支持 BOM 导出接口。', 'BOM export API is unavailable.'));
+			file = await fn(stem, state.exportPrefs.bomFileType);
+		} else if (kind === 'gerber') {
+			if (!pcbApi || typeof pcbApi.getGerberFile !== 'function') throw new Error(t('当前 EDA 版本不支持 Gerber 导出接口。', 'Gerber export API is unavailable.'));
+			file = await pcbApi.getGerberFile(stem, state.exportPrefs.gerberColorSilkscreen);
+		} else if (kind === 'pickplace') {
+			if (!pcbApi || typeof pcbApi.getPickAndPlaceFile !== 'function') throw new Error(t('当前 EDA 版本不支持坐标文件导出接口。', 'Pick&Place export API is unavailable.'));
+			file = await pcbApi.getPickAndPlaceFile(stem, state.exportPrefs.pickPlaceFileType);
+		} else if (kind === 'model3d') {
+			if (!pcbApi || typeof pcbApi.get3DFile !== 'function') throw new Error(t('当前 EDA 版本不支持 3D 导出接口。', '3D export API is unavailable.'));
+			file = await pcbApi.get3DFile(
+				stem,
+				state.exportPrefs.modelFileType,
+				['Component Model', 'Via', 'Silkscreen', 'Wire In Signal Layer'],
+				state.exportPrefs.modelMode,
+				state.exportPrefs.autoGenerateModels,
+			);
+		} else if (kind === 'testpoint') {
+			if (!pcbApi || typeof pcbApi.getTestPointFile !== 'function') throw new Error(t('当前 EDA 版本不支持测试点报告导出接口。', 'Test point export API is unavailable.'));
+			file = await pcbApi.getTestPointFile(stem, state.exportPrefs.pickPlaceFileType);
+		} else if (kind === 'netlist') {
+			const fn =
+				pcbApi && typeof pcbApi.getNetlistFile === 'function'
+					? pcbApi.getNetlistFile.bind(pcbApi)
+					: schApi && typeof schApi.getNetlistFile === 'function'
+						? schApi.getNetlistFile.bind(schApi)
+						: null;
+			if (!fn) throw new Error(t('当前 EDA 版本不支持网表导出接口。', 'Netlist export API is unavailable.'));
+			file = await fn(stem);
+		}
+		if (!file) throw new Error(t('未获取到导出文件。请确认当前工程和画布上下文可用。', 'No file returned. Confirm the current design context is available.'));
+		await saveBlobFile(file, file.name || `${stem}`);
+		await pushReport(
+			buildContextReport('export', {
+				snapshot,
+				fileName: file.name || stem,
+				exportKind: kind,
+				notes: t(`已导出 ${kind} 资料。`, `${kind} asset exported.`),
+			}),
+		);
+		setStatus('success', t(`已导出制造资料：${file.name || stem}`, `Manufacture asset exported: ${file.name || stem}`));
+		render();
+	}
+	async function clearReportHistory() {
+		state.reportHistory = [];
+		await saveReportHistory();
+		setStatus('success', t('报告历史已清空。', 'Report history cleared.'));
+		render();
+	}
 
 	function typeMap() {
 		return new Map(state.db.types.map((item) => [item.id, item]));
@@ -448,11 +823,20 @@
 		return Boolean(state.prefs?.features?.[key]);
 	}
 	function hasAnyEdaEntryEnabled() {
-		return featureEnabled('showEdaSnapshot') || featureEnabled('enableCurrentPcbImport') || featureEnabled('enableProjectBatchImport');
+		return (
+			featureEnabled('showEdaSnapshot') ||
+			featureEnabled('enableCurrentPcbImport') ||
+			featureEnabled('enableProjectBatchImport') ||
+			featureEnabled('enableReportsView') ||
+			featureEnabled('enableExportHub') ||
+			featureEnabled('enableCanvasTools')
+		);
 	}
 	function normalizeActiveView() {
 		if (state.view === 'purchase' && !featureEnabled('enablePurchaseView')) state.view = 'dashboard';
 		if (state.view === 'stores' && !featureEnabled('enableStoresView')) state.view = 'dashboard';
+		if (state.view === 'reports' && !featureEnabled('enableReportsView')) state.view = 'dashboard';
+		if (state.view === 'exports' && !featureEnabled('enableExportHub')) state.view = 'dashboard';
 	}
 	function warning(component) {
 		return component.warningThreshold > 0 && component.totalQuantity <= component.warningThreshold;
@@ -463,6 +847,8 @@
 	function header() {
 		const actionButtons = [
 			`<button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button>`,
+			featureEnabled('enableReportsView') ? `<button class="ghost-button" data-action="view" data-view="reports">${e(t('工程报告', 'Reports'))}</button>` : '',
+			featureEnabled('enableExportHub') ? `<button class="ghost-button" data-action="view" data-view="exports">${e(t('导出中心', 'Export Hub'))}</button>` : '',
 			featureEnabled('enableCurrentPcbImport')
 				? `<button class="ghost-button" data-action="import-eda-bom">${e(t('从当前工程导入 BOM', 'Import BOM from EDA'))}</button>`
 				: '',
@@ -474,11 +860,13 @@
 		]
 			.filter(Boolean)
 			.join('');
-		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('物料管理助手', 'BOM Manager'))}</h1><p class="hero-copy">${e(t('在插件窗口中统一维护类型、元器件、采购记录、项目、PCB 与 BOM。', 'Manage types, components, purchase records, projects, PCB and BOM in one place.'))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
+		return `<header class="app-header"><div><p class="eyebrow">JLCEDA Plugin</p><h1>${e(t('工程脉搏', 'Design Pulse'))}</h1><p class="hero-copy">${e(t('围绕当前工程上下文、制造导出、画布快照与 BOM 协作，提供一套贴近嘉立创 EDA 工作流的工程助手。', 'A workflow-focused plugin for current design context, manufacture exports, canvas capture, and BOM collaboration in JLCEDA Pro.'))}</p></div><div class="header-actions">${actionButtons}</div></header>`;
 	}
 	function nav() {
 		const items = [
 			['dashboard', '概览', 'Overview'],
+			featureEnabled('enableReportsView') ? ['reports', '报告', 'Reports'] : null,
+			featureEnabled('enableExportHub') ? ['exports', '导出中心', 'Export Hub'] : null,
 			['components', '元器件', 'Components'],
 			['types', '类型', 'Types'],
 			['projects', '项目/PCB', 'Projects/PCB'],
@@ -504,10 +892,12 @@
 				? t(`上次读取：${time(snapshot.fetchedAt)}`, `Last loaded: ${time(snapshot.fetchedAt)}`)
 				: t('尚未读取当前工程上下文。', 'Current design context has not been loaded yet.');
 		const details = snapshot
-			? `<div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectLabel || '-')}</strong></div><div><span>${e(t('当前 PCB', 'Current PCB'))}</span><strong>${e(pcbLabel || '-')}</strong></div><div><span>${e(t('当前板子', 'Current Board'))}</span><strong>${e(boardLabel || '-')}</strong></div><div><span>${e(t('工程条目', 'Project Items'))}</span><strong>${snapshot.projectDataCount || 0}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ''}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`工程链接名：${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ''}${snapshot.schematicName ? `<li>${e(t(`当前原理图：${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ''}${snapshot.projectUuid ? `<li>${e(`UUID: ${snapshot.projectUuid}`)}</li>` : ''}</ul>`
+			? `<div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectLabel || '-')}</strong></div><div><span>${e(t('当前 PCB', 'Current PCB'))}</span><strong>${e(pcbLabel || '-')}</strong></div><div><span>${e(t('当前板子', 'Current Board'))}</span><strong>${e(boardLabel || '-')}</strong></div><div><span>${e(t('工程条目', 'Project Items'))}</span><strong>${snapshot.projectDataCount || 0}</strong></div><div><span>${e(t('当前文档', 'Current Document'))}</span><strong>${e(snapshot.currentDocumentType || '-')}</strong></div><div><span>${e(t('团队/工作区', 'Team/Workspace'))}</span><strong>${e(`${snapshot.teamName || '-'} / ${snapshot.workspaceName || '-'}`)}</strong></div></div>${snapshot.projectDescription ? `<p class="support-text">${e(snapshot.projectDescription)}</p>` : ''}<ul class="info-list">${projectLabel && snapshot.projectName && snapshot.projectName !== projectLabel ? `<li>${e(t(`工程链接名：${snapshot.projectName}`, `Project slug: ${snapshot.projectName}`))}</li>` : ''}${snapshot.schematicName ? `<li>${e(t(`当前原理图：${snapshot.schematicName}`, `Current schematic: ${snapshot.schematicName}`))}</li>` : ''}${snapshot.currentDocumentUuid ? `<li>${e(t(`当前文档 UUID：${snapshot.currentDocumentUuid}`, `Document UUID: ${snapshot.currentDocumentUuid}`))}</li>` : ''}${snapshot.projectUuid ? `<li>${e(`Project UUID: ${snapshot.projectUuid}`)}</li>` : ''}</ul>`
 			: `<p class="empty-state">${e(t('切换到已打开的工程后点击“读取当前工程快照”，插件会读取当前工程、PCB 与板子信息。', 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
 		const buttons = [
 			`<button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button>`,
+			featureEnabled('enableReportsView') ? `<button class="ghost-button" type="button" data-action="view" data-view="reports">${e(t('查看报告', 'Open Reports'))}</button>` : '',
+			featureEnabled('enableExportHub') ? `<button class="ghost-button" type="button" data-action="view" data-view="exports">${e(t('制造导出', 'Open Exports'))}</button>` : '',
 			featureEnabled('enableProjectBatchImport')
 				? `<button class="ghost-button" type="button" data-action="import-eda-project-bom">${e(t('整工程批量导入', 'Batch Import Project'))}</button>`
 				: '',
@@ -527,6 +917,8 @@
 	}
 
 	function view() {
+		if (state.view === 'reports') return reportsView();
+		if (state.view === 'exports') return exportsView();
 		if (state.view === 'types') return typesView();
 		if (state.view === 'components') return componentsView();
 		if (state.view === 'projects') return projectsView();
@@ -540,8 +932,11 @@
 		const warningCount = state.db.components.filter(warning).length;
 		const recordCount = state.db.components.reduce((sum, item) => sum + item.records.length, 0);
 		const bomCount = state.db.pcbs.reduce((sum, item) => sum + item.items.length, 0);
+		const reportCount = state.reportHistory.length;
 		const quickActions = [
-			`<button class="primary-button" data-action="view" data-view="components">${e(t('新增元器件', 'Add Component'))}</button>`,
+			featureEnabled('enableReportsView') ? `<button class="primary-button" data-action="generate-context-report">${e(t('生成工程报告', 'Generate Report'))}</button>` : `<button class="primary-button" data-action="view" data-view="components">${e(t('新增元器件', 'Add Component'))}</button>`,
+			featureEnabled('enableExportHub') ? `<button class="ghost-button" data-action="view" data-view="exports">${e(t('打开导出中心', 'Open Export Hub'))}</button>` : '',
+			featureEnabled('enableReportsView') ? `<button class="ghost-button" data-action="view" data-view="reports">${e(t('查看报告历史', 'Open Report History'))}</button>` : '',
 			`<button class="ghost-button" data-action="view" data-view="projects">${e(t('维护项目/PCB', 'Manage Projects/PCB'))}</button>`,
 			featureEnabled('enableStoresView') ? `<button class="ghost-button" data-action="view" data-view="stores">${e(t('维护店铺', 'Manage Stores'))}</button>` : '',
 			featureEnabled('enablePurchaseView') ? `<button class="ghost-button" data-action="view" data-view="purchase">${e(t('查看采购清单', 'Open Purchase List'))}</button>` : '',
@@ -549,7 +944,32 @@
 			.filter(Boolean)
 			.join('');
 		const snapshotCard = currentEdaSnapshotCard();
-		return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t('元器件', 'Components'))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t('库存预警', 'Warnings'))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t('采购记录', 'Records'))}</span><strong>${recordCount}</strong></article><article class="summary-card accent-red"><span>${e(t('BOM 明细', 'BOM Items'))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t('快速入口', 'Quick Actions'))}</h2><div class="quick-actions">${quickActions}</div></article>${snapshotCard}</section><section class="panel-card"><h2>${e(t('使用提示', 'Tips'))}</h2><ul class="info-list"><li>${e(t('建议定期导出 JSON 做离线备份。', 'Export JSON regularly for offline backup.'))}</li><li>${e(t('跨设备/跨账号可用导入恢复。', 'Use Import to restore across devices/accounts.'))}</li><li>${e(t('窗口标题栏现在支持最大化与最小化；如窗口被最小化，再次点击插件菜单即可恢复显示。', 'The iframe window now supports maximize and minimize. If it is minimized, click the plugin menu again to restore it.'))}</li><li>${e(t('需要导入当前工程 BOM 时，先读取工程快照可以更直观看到将要写入的工程/PCB 来源。', 'Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM.'))}</li></ul></section>`;
+		return `<section class="card-grid summary-grid"><article class="summary-card accent-blue"><span>${e(t('元器件', 'Components'))}</span><strong>${state.db.components.length}</strong></article><article class="summary-card accent-gold"><span>${e(t('库存预警', 'Warnings'))}</span><strong>${warningCount}</strong></article><article class="summary-card accent-green"><span>${e(t('报告历史', 'Reports'))}</span><strong>${reportCount}</strong></article><article class="summary-card accent-red"><span>${e(t('BOM 明细', 'BOM Items'))}</span><strong>${bomCount}</strong></article></section><section class="card-grid two-col"><article class="panel-card"><h2>${e(t('快速入口', 'Quick Actions'))}</h2><div class="quick-actions">${quickActions}</div><div class="quick-actions">${featureEnabled('enableCanvasTools') ? `<button class="ghost-button" data-action="capture-canvas-current">${e(t('截图当前视图', 'Capture Current View'))}</button>` : ''}${featureEnabled('enableCanvasTools') ? `<button class="ghost-button" data-action="capture-canvas-selected">${e(t('截图当前选区', 'Capture Selection'))}</button>` : ''}${featureEnabled('enableCanvasTools') ? `<button class="ghost-button" data-action="mark-canvas-selected">${e(t('框选当前选区', 'Mark Selection'))}</button>` : ''}</div></article>${snapshotCard}</section><section class="panel-card"><h2>${e(t('使用提示', 'Tips'))}</h2><ul class="info-list"><li>${e(t('建议在“报告”页定期生成工程快照，便于回看当前画布、团队和工作区上下文。', 'Generate context reports regularly in Reports for quick traceability of current design, team, and workspace context.'))}</li><li>${e(t('制造导出集中在“导出中心”里，适合做 Gerber、坐标、3D、网表和测试点资料的统一导出。', 'Use Export Hub to keep Gerber, Pick&Place, 3D, netlist, and test point exports in one place.'))}</li><li>${e(t('窗口标题栏现在支持最大化与最小化；如窗口被最小化，再次点击插件菜单即可恢复显示。', 'The iframe window now supports maximize and minimize. If it is minimized, click the plugin menu again to restore it.'))}</li><li>${e(t('需要导入当前工程 BOM 时，先读取工程快照可以更直观看到将要写入的工程/PCB 来源。', 'Load the design snapshot first if you want to confirm the project/PCB source before importing the current BOM.'))}</li></ul></section>`;
+	}
+	function reportsView() {
+		const snapshot = state.edaSnapshot;
+		const contextPanel = `<section class="panel-card"><div class="section-head"><h2>${e(t('工程报告', 'Engineering Reports'))}</h2><div class="inline-actions"><button class="primary-button" type="button" data-action="generate-context-report">${e(t('生成快照报告', 'Generate Context Report'))}</button><button class="ghost-button" type="button" data-action="refresh-eda-snapshot">${e(t('刷新上下文', 'Refresh Context'))}</button></div></div><p class="support-text">${e(snapshot ? t(`当前文档：${snapshot.currentDocumentType || '-'}，团队：${snapshot.teamName || '-'}，工作区：${snapshot.workspaceName || '-'}`, `Current document: ${snapshot.currentDocumentType || '-'}, team: ${snapshot.teamName || '-'}, workspace: ${snapshot.workspaceName || '-'}`) : t('先读取当前工程快照，再生成报告。', 'Load the current design snapshot before generating reports.'))}</p><div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectDisplayNameFromSnapshot(snapshot) || '-')}</strong></div><div><span>${e(t('PCB', 'PCB'))}</span><strong>${e(pcbDisplayNameFromSnapshot(snapshot) || '-')}</strong></div><div><span>${e(t('板子', 'Board'))}</span><strong>${e(boardDisplayNameFromSnapshot(snapshot) || '-')}</strong></div><div><span>${e(t('文档类型', 'Document Type'))}</span><strong>${e(snapshot?.currentDocumentType || '-')}</strong></div><div><span>${e(t('团队', 'Team'))}</span><strong>${e(snapshot?.teamName || '-')}</strong></div><div><span>${e(t('工作区', 'Workspace'))}</span><strong>${e(snapshot?.workspaceName || '-')}</strong></div></div></section>`;
+		const canvasButtons = featureEnabled('enableCanvasTools')
+			? `<section class="panel-card"><div class="section-head"><h2>${e(t('画布工具', 'Canvas Tools'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="clear-canvas-markers">${e(t('清除标记', 'Clear Markers'))}</button></div></div><div class="quick-actions"><button class="ghost-button" type="button" data-action="zoom-canvas-all">${e(t('适应全部', 'Fit All'))}</button><button class="ghost-button" type="button" data-action="zoom-canvas-selected">${e(t('适应选中', 'Fit Selected'))}</button><button class="ghost-button" type="button" data-action="mark-canvas-all">${e(t('框选全部范围', 'Mark All'))}</button><button class="ghost-button" type="button" data-action="mark-canvas-selected">${e(t('框选当前选区', 'Mark Selected'))}</button><button class="primary-button" type="button" data-action="capture-canvas-current">${e(t('截图当前视图', 'Capture Current View'))}</button><button class="primary-button" type="button" data-action="capture-canvas-all">${e(t('截图全部图元', 'Capture All'))}</button><button class="primary-button" type="button" data-action="capture-canvas-selected">${e(t('截图当前选区', 'Capture Selection'))}</button></div><p class="support-text">${e(t('适合在 PCB/原理图排查时快速框选、截图并写入报告历史。', 'Use these tools to frame, capture, and record canvas context while reviewing PCB or schematic documents.'))}</p></section>`
+			: '';
+		const historyItems = state.reportHistory
+			.map(
+				(item) => `<article class="entity-card"><header class="entity-header"><div><h3>${e(item.title || reportKindText(item.kind))}</h3><p>${e(`${reportKindText(item.kind)} · ${time(item.createdAt)}`)}</p></div><div class="inline-actions"><button class="ghost-button" type="button" data-action="export-report-json" data-report-id="${item.id}">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" type="button" data-action="export-report-html" data-report-id="${item.id}">${e(t('导出 HTML', 'Export HTML'))}</button><button class="danger-button" type="button" data-action="delete-report" data-report-id="${item.id}">${e(t('删除', 'Delete'))}</button></div></header><div class="meta-grid"><div><span>${e(t('工程', 'Project'))}</span><strong>${e(projectDisplayNameFromSnapshot(item.snapshot) || '-')}</strong></div><div><span>${e(t('文档类型', 'Document Type'))}</span><strong>${e(item.snapshot?.currentDocumentType || '-')}</strong></div><div><span>${e(t('文件', 'File'))}</span><strong>${e(item.fileName || '-')}</strong></div><div><span>${e(t('备注', 'Notes'))}</span><strong>${e(item.notes || '-')}</strong></div></div></article>`,
+			)
+			.join('');
+		const historyPanel = `<section class="panel-card"><div class="section-head"><h2>${e(t('报告历史', 'Report History'))}</h2><div class="inline-actions"><span class="pill">${e(t(`保留最近 ${state.exportPrefs.reportHistoryLimit} 条`, `Keep latest ${state.exportPrefs.reportHistoryLimit}`))}</span><button class="ghost-button" type="button" data-action="clear-report-history">${e(t('清空历史', 'Clear History'))}</button></div></div>${historyItems || `<p class="empty-state">${e(t('尚无报告历史。生成工程报告或导出/截图后会自动记录。', 'No report history yet. Reports, exports, and captures will appear here automatically.'))}</p>`}</section>`;
+		return `${contextPanel}${canvasButtons}${historyPanel}`;
+	}
+	function exportsView() {
+		const exportCards = [
+			['bom', t('BOM 文件', 'BOM File'), t('按当前文档自动选择 PCB / 原理图导出 BOM。', 'Export BOM from the current PCB or schematic context.')],
+			['gerber', t('Gerber 制版', 'Gerber Package'), t('导出当前 PCB 的制版文件。', 'Export Gerber manufacturing package for the current PCB.')],
+			['pickplace', t('贴片坐标', 'Pick&Place'), t('导出当前 PCB 的坐标文件。', 'Export pick-and-place coordinates for the current PCB.')],
+			['model3d', t('3D 模型', '3D Model'), t('导出 STEP/OBJ 3D 模型。', 'Export STEP/OBJ 3D model files.')],
+			['testpoint', t('测试点报告', 'Test Point'), t('导出测试点报告用于测试夹具准备。', 'Export test point files for test-fixture preparation.')],
+			['netlist', t('网表文件', 'Netlist'), t('按当前文档导出网表文件。', 'Export netlist from the current document context.')],
+		];
+		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t('导出预设', 'Export Presets'))}</h2><form id="export-prefs-form" class="stack-form"><label><span>${e(t('BOM 格式', 'BOM Format'))}</span><select name="bomFileType"><option value="xlsx" ${state.exportPrefs.bomFileType === 'xlsx' ? 'selected' : ''}>XLSX</option><option value="csv" ${state.exportPrefs.bomFileType === 'csv' ? 'selected' : ''}>CSV</option></select></label><label><span>${e(t('坐标格式', 'Pick&Place Format'))}</span><select name="pickPlaceFileType"><option value="xlsx" ${state.exportPrefs.pickPlaceFileType === 'xlsx' ? 'selected' : ''}>XLSX</option><option value="csv" ${state.exportPrefs.pickPlaceFileType === 'csv' ? 'selected' : ''}>CSV</option></select></label><label><span>${e(t('3D 格式', '3D Format'))}</span><select name="modelFileType"><option value="step" ${state.exportPrefs.modelFileType === 'step' ? 'selected' : ''}>STEP</option><option value="obj" ${state.exportPrefs.modelFileType === 'obj' ? 'selected' : ''}>OBJ</option></select></label><label><span>${e(t('3D 模式', '3D Mode'))}</span><select name="modelMode"><option value="Outfit" ${state.exportPrefs.modelMode === 'Outfit' ? 'selected' : ''}>Outfit</option><option value="Parts" ${state.exportPrefs.modelMode === 'Parts' ? 'selected' : ''}>Parts</option></select></label><label><span>${e(t('报告历史条数', 'Report History Limit'))}</span><input name="reportHistoryLimit" type="number" min="3" max="20" step="1" value="${e(state.exportPrefs.reportHistoryLimit)}" /></label><label class="checkbox-row"><input type="checkbox" name="gerberColorSilkscreen" ${state.exportPrefs.gerberColorSilkscreen ? 'checked' : ''} /><span>${e(t('Gerber 启用彩色丝印', 'Use color silkscreen for Gerber'))}</span></label><label class="checkbox-row"><input type="checkbox" name="autoGenerateModels" ${state.exportPrefs.autoGenerateModels ? 'checked' : ''} /><span>${e(t('3D 自动补全未绑定模型', 'Auto-generate missing 3D models'))}</span></label><button class="primary-button" type="submit">${e(t('保存预设', 'Save Presets'))}</button></form></article><article class="panel-card"><h2>${e(t('导出说明', 'Export Notes'))}</h2><ul class="info-list"><li>${e(t('BOM 和网表会优先按当前画布上下文选择 PCB 或原理图接口。', 'BOM and netlist prefer the active PCB or schematic context automatically.'))}</li><li>${e(t('Gerber、坐标、3D、测试点资料依赖当前 PCB 文档。', 'Gerber, Pick&Place, 3D, and test point exports require an active PCB document.'))}</li><li>${e(t('每次导出都会自动写入“报告历史”，便于回看导出时间和工程上下文。', 'Each export is recorded in Report History for later traceability.'))}</li></ul></article></section><section class="panel-card"><div class="section-head"><h2>${e(t('制造导出中心', 'Manufacture Export Hub'))}</h2><div class="inline-actions"><button class="ghost-button" type="button" data-action="refresh-eda-snapshot">${e(t('刷新上下文', 'Refresh Context'))}</button></div></div><div class="export-grid">${exportCards.map(([kind, title, desc]) => `<article class="export-card"><h3>${e(title)}</h3><p>${e(desc)}</p><button class="primary-button" type="button" data-action="export-manufacture" data-kind="${kind}">${e(t('立即导出', 'Export Now'))}</button></article>`).join('')}</div></section>`;
 	}
 
 	function typesView() {
@@ -671,7 +1091,7 @@
 	function settingsView() {
 		const features = { ...defaultFeatureFlags(), ...(state.prefs.features || {}) };
 		const toggleRow = (name, labelZh, labelEn, descZh, descEn) => `<div class="stack-list"><label class="checkbox-row"><input type="checkbox" name="${name}" ${features[name] ? 'checked' : ''} /><span>${e(t(labelZh, labelEn))}</span></label><p class="support-text">${e(t(descZh, descEn))}</p></div>`;
-		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t('界面偏好', 'Preferences'))}</h2><form id="prefs-form" class="stack-form"><label><span>${e(t('语言', 'Language'))}</span><select name="lang"><option value="zh" ${state.prefs.lang === 'zh' ? 'selected' : ''}>中文</option><option value="en" ${state.prefs.lang === 'en' ? 'selected' : ''}>English</option></select></label><label><span>${e(t('主题', 'Theme'))}</span><select name="theme"><option value="light" ${state.prefs.theme === 'light' ? 'selected' : ''}>${e(t('亮色', 'Light'))}</option><option value="dark" ${state.prefs.theme === 'dark' ? 'selected' : ''}>${e(t('暗色', 'Dark'))}</option></select></label><div class="subsection-head"><h3>${e(t('EDA 集成功能', 'EDA Integration'))}</h3></div>${toggleRow('showEdaSnapshot', '显示当前工程快照卡片', 'Show current design snapshot', '在首页显示当前工程、PCB、板子信息和刷新入口。', 'Show current project, PCB, board info and refresh actions on the dashboard.')}${toggleRow('enableCurrentPcbImport', '启用当前 PCB BOM 导入', 'Enable current PCB BOM import', '保留“从当前工程导入 BOM”和“导入当前 PCB BOM”入口。', 'Keep the current-PCB BOM import actions available.')}${toggleRow('enableProjectBatchImport', '启用整工程批量导入', 'Enable project batch import', '保留“整工程批量导入”入口，可同步当前工程下全部 PCB。', 'Keep the batch-import action to sync all PCB under the current project.')}${toggleRow('enableOpenSourcePcb', '启用“打开对应 PCB”', 'Enable open source PCB action', '在项目页为已关联宿主 PCB 的记录显示“一键打开对应 PCB”。', 'Show the one-click open action for PCB entries linked to JLCEDA documents.')}${toggleRow('autoLoadEdaSnapshot', '启动时自动读取工程快照', 'Auto load snapshot on startup', '插件打开时自动尝试读取当前工程上下文；失败时可手动刷新。', 'Try to read the current design context when the plugin opens; you can still refresh manually if it fails.')}<div class="subsection-head"><h3>${e(t('页面功能', 'Views'))}</h3></div>${toggleRow('enablePurchaseView', '启用采购清单页面', 'Enable purchase view', '显示采购清单导航、快捷入口和导出能力。', 'Show the purchase list page, shortcuts and export actions.')}${toggleRow('enableStoresView', '启用店铺页面', 'Enable stores view', '显示店铺维护页面，便于管理供应商与采购记录。', 'Show the stores page for supplier and purchase-record management.')}<button class="primary-button" type="submit">${e(t('保存偏好', 'Save'))}</button></form></article><article class="panel-card"><h2>${e(t('插件存储', 'Plugin Storage'))}</h2><ul class="info-list"><li>${e(t(`当前共 ${state.db.types.length} 个类型、${state.db.components.length} 个元器件、${state.db.projects.length} 个项目。`, `Current totals: ${state.db.types.length} types, ${state.db.components.length} components, ${state.db.projects.length} projects.`))}</li><li>${e(t('窗口标题栏已支持最大化与最小化；窗口最小化后，再点击插件菜单可恢复。', 'The window title bar now supports maximize and minimize. Click the plugin menu again to restore a minimized window.'))}</li></ul><div class="inline-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button><button class="danger-button" data-action="reset">${e(t('重置数据', 'Reset Data'))}</button></div></article></section>`;
+		return `<section class="card-grid two-col"><article class="panel-card"><h2>${e(t('界面偏好', 'Preferences'))}</h2><form id="prefs-form" class="stack-form"><label><span>${e(t('语言', 'Language'))}</span><select name="lang"><option value="zh" ${state.prefs.lang === 'zh' ? 'selected' : ''}>中文</option><option value="en" ${state.prefs.lang === 'en' ? 'selected' : ''}>English</option></select></label><label><span>${e(t('主题', 'Theme'))}</span><select name="theme"><option value="light" ${state.prefs.theme === 'light' ? 'selected' : ''}>${e(t('亮色', 'Light'))}</option><option value="dark" ${state.prefs.theme === 'dark' ? 'selected' : ''}>${e(t('暗色', 'Dark'))}</option></select></label><div class="subsection-head"><h3>${e(t('EDA 集成功能', 'EDA Integration'))}</h3></div>${toggleRow('showEdaSnapshot', '显示当前工程快照卡片', 'Show current design snapshot', '在首页显示当前工程、PCB、板子信息和刷新入口。', 'Show current project, PCB, board info and refresh actions on the dashboard.')}${toggleRow('enableCurrentPcbImport', '启用当前 PCB BOM 导入', 'Enable current PCB BOM import', '保留“从当前工程导入 BOM”和“导入当前 PCB BOM”入口。', 'Keep the current-PCB BOM import actions available.')}${toggleRow('enableProjectBatchImport', '启用整工程批量导入', 'Enable project batch import', '保留“整工程批量导入”入口，可同步当前工程下全部 PCB。', 'Keep the batch-import action to sync all PCB under the current project.')}${toggleRow('enableOpenSourcePcb', '启用“打开对应 PCB”', 'Enable open source PCB action', '在项目页为已关联宿主 PCB 的记录显示“一键打开对应 PCB”。', 'Show the one-click open action for PCB entries linked to JLCEDA documents.')}${toggleRow('enableReportsView', '启用报告页面', 'Enable reports view', '显示工程快照、报告历史以及报告导出能力。', 'Show engineering reports, history, and report export actions.')}${toggleRow('enableExportHub', '启用导出中心', 'Enable export hub', '显示制造导出中心，统一导出 BOM/Gerber/坐标/3D/网表等资料。', 'Show the manufacture export hub for BOM, Gerber, Pick&Place, 3D, and netlist outputs.')}${toggleRow('enableCanvasTools', '启用画布工具', 'Enable canvas tools', '显示适应、框选、截图等画布辅助动作。', 'Show fit, marker, and capture tools for the active canvas.')}${toggleRow('autoLoadEdaSnapshot', '启动时自动读取工程快照', 'Auto load snapshot on startup', '插件打开时自动尝试读取当前工程上下文；失败时可手动刷新。', 'Try to read the current design context when the plugin opens; you can still refresh manually if it fails.')}<div class="subsection-head"><h3>${e(t('页面功能', 'Views'))}</h3></div>${toggleRow('enablePurchaseView', '启用采购清单页面', 'Enable purchase view', '显示采购清单导航、快捷入口和导出能力。', 'Show the purchase list page, shortcuts and export actions.')}${toggleRow('enableStoresView', '启用店铺页面', 'Enable stores view', '显示店铺维护页面，便于管理供应商与采购记录。', 'Show the stores page for supplier and purchase-record management.')}<button class="primary-button" type="submit">${e(t('保存偏好', 'Save'))}</button></form></article><article class="panel-card"><h2>${e(t('插件存储', 'Plugin Storage'))}</h2><ul class="info-list"><li>${e(t(`当前共 ${state.db.types.length} 个类型、${state.db.components.length} 个元器件、${state.db.projects.length} 个项目。`, `Current totals: ${state.db.types.length} types, ${state.db.components.length} components, ${state.db.projects.length} projects.`))}</li><li>${e(t(`已记录 ${state.reportHistory.length} 条工程报告/导出历史。`, `Stored ${state.reportHistory.length} report/export history entries.`))}</li><li>${e(t('窗口标题栏已支持最大化与最小化；窗口最小化后，再点击插件菜单可恢复。', 'The window title bar now supports maximize and minimize. Click the plugin menu again to restore a minimized window.'))}</li></ul><div class="inline-actions"><button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button><button class="ghost-button" data-action="export-json">${e(t('导出 JSON', 'Export JSON'))}</button><button class="ghost-button" data-action="export-xlsx">${e(t('导出 Excel(.xlsx)', 'Export Excel (.xlsx)'))}</button><button class="ghost-button" data-action="view" data-view="reports">${e(t('查看报告', 'Open Reports'))}</button><button class="danger-button" data-action="reset">${e(t('重置数据', 'Reset Data'))}</button></div></article></section>`;
 	}
 
 	function modal() {
@@ -2406,6 +2826,12 @@
 		setStatus('success', t('店铺评价已删除。', 'Store deleted.'));
 		render();
 	}
+	async function deleteReport(idValue) {
+		state.reportHistory = state.reportHistory.filter((item) => item.id !== idValue);
+		await saveReportHistory();
+		setStatus('success', t('报告记录已删除。', 'Report entry deleted.'));
+		render();
+	}
 
 	app.addEventListener('input', (event) => {
 		const target = event.target;
@@ -2446,6 +2872,20 @@
 				state.status = '';
 				if (action === 'view') { state.view = target.dataset.view || 'dashboard'; render(); return; }
 				if (action === 'refresh-eda-snapshot') return refreshCurrentEdaSnapshot();
+				if (action === 'generate-context-report') return generateContextReport();
+				if (action === 'capture-canvas-current') return captureCanvas('current');
+				if (action === 'capture-canvas-all') return captureCanvas('all');
+				if (action === 'capture-canvas-selected') return captureCanvas('selected');
+				if (action === 'zoom-canvas-all') return focusCanvas('all');
+				if (action === 'zoom-canvas-selected') return focusCanvas('selected');
+				if (action === 'mark-canvas-all') return showCanvasMarker('all');
+				if (action === 'mark-canvas-selected') return showCanvasMarker('selected');
+				if (action === 'clear-canvas-markers') return clearCanvasMarkers();
+				if (action === 'clear-report-history') return clearReportHistory();
+				if (action === 'export-report-json') return exportStoredReport(target.dataset.reportId, 'json');
+				if (action === 'export-report-html') return exportStoredReport(target.dataset.reportId, 'html');
+				if (action === 'delete-report') return deleteReport(target.dataset.reportId);
+				if (action === 'export-manufacture') return exportManufactureAsset(target.dataset.kind);
 				if (action === 'import-eda-project-bom') return importAllEdaPcbsFromCurrentProject();
 				if (action === 'import') return importData();
 				if (action === 'import-eda-bom') return importEdaBomFromCurrent();
@@ -2510,6 +2950,9 @@
 							enableOpenSourcePcb: checked('enableOpenSourcePcb'),
 							enablePurchaseView: checked('enablePurchaseView'),
 							enableStoresView: checked('enableStoresView'),
+							enableReportsView: checked('enableReportsView'),
+							enableExportHub: checked('enableExportHub'),
+							enableCanvasTools: checked('enableCanvasTools'),
 							autoLoadEdaSnapshot: checked('autoLoadEdaSnapshot'),
 						},
 					});
@@ -2525,6 +2968,22 @@
 						}
 					}
 					setStatus('success', t('偏好已保存。', 'Preferences saved.'));
+					render();
+					return;
+				}
+				if (form.id === 'export-prefs-form') {
+					state.exportPrefs = normalizeExportPrefs({
+						bomFileType: values.bomFileType,
+						pickPlaceFileType: values.pickPlaceFileType,
+						modelFileType: values.modelFileType,
+						modelMode: values.modelMode,
+						reportHistoryLimit: values.reportHistoryLimit,
+						gerberColorSilkscreen: Object.prototype.hasOwnProperty.call(values, 'gerberColorSilkscreen'),
+						autoGenerateModels: Object.prototype.hasOwnProperty.call(values, 'autoGenerateModels'),
+					});
+					await saveExportPrefs();
+					await saveReportHistory();
+					setStatus('success', t('导出预设已保存。', 'Export presets saved.'));
 					render();
 					return;
 				}

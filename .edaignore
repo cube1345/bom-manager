@@ -5,6 +5,7 @@
 /config/
 /coverage/
 /node_modules/
+/scripts/
 /src/
 /iframe/src/
 /.edaignore
