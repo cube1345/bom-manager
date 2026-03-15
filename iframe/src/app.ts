@@ -48,7 +48,9 @@
 	function persistWindowSizeHint() {
 		try {
 			if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
-				void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_SIZE_HINT_KEY, currentWindowSizeHint());
+				const hint = currentWindowSizeHint();
+				void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_SIZE_HINT_KEY, hint);
+				void edaApi.sys_Storage.setExtensionUserConfig(LEGACY_WINDOW_SIZE_HINT_KEY, hint);
 			}
 		} catch (_e) {}
 	}
@@ -58,10 +60,11 @@
 
 		// Capture runtime errors for offline debugging. These are written into extension user config,
 		// so the entry script can show them when openIFrame fails/blank.
-		const writeLastError = (payload) => {
+			const writeLastError = (payload) => {
 			try {
 				if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
 					void edaApi.sys_Storage.setExtensionUserConfig(LAST_ERROR_KEY, payload);
+					void edaApi.sys_Storage.setExtensionUserConfig(LEGACY_LAST_ERROR_KEY, payload);
 				}
 			} catch (_e) {}
 		};
@@ -119,8 +122,11 @@
 				viewportHeight: Math.max(0, Math.round(window.innerHeight || 0)),
 			};
 			void edaApi.sys_Storage.setExtensionUserConfig(LAST_BOOT_TS_KEY, now);
+			void edaApi.sys_Storage.setExtensionUserConfig(LEGACY_LAST_BOOT_TS_KEY, now);
 			void edaApi.sys_Storage.setExtensionUserConfig(LAST_BOOT_KEY, bootInfo);
+			void edaApi.sys_Storage.setExtensionUserConfig(LEGACY_LAST_BOOT_KEY, bootInfo);
 			void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, 'normal');
+			void edaApi.sys_Storage.setExtensionUserConfig(LEGACY_WINDOW_STATE_KEY, 'normal');
 			persistWindowSizeHint();
 		}
 
@@ -148,6 +154,7 @@
 		try {
 			if (edaApi.sys_Storage && typeof edaApi.sys_Storage.setExtensionUserConfig === 'function') {
 				void edaApi.sys_Storage.setExtensionUserConfig(WINDOW_STATE_KEY, 'closed');
+				void edaApi.sys_Storage.setExtensionUserConfig(LEGACY_WINDOW_STATE_KEY, 'closed');
 			}
 		} catch (_e) {}
 	});

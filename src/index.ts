@@ -76,6 +76,7 @@ function getPreferredWindowSize(storageApi: any): { width: number; height: numbe
 async function writeWindowState(storageApi: any, state: 'normal' | 'maximized' | 'minimized' | 'closed'): Promise<void> {
 	try {
 		await storageApi?.setExtensionUserConfig?.(DESIGN_PULSE_IFRAME_STATE_KEY, state);
+		await storageApi?.setExtensionUserConfig?.(LEGACY_IFRAME_STATE_KEY, state);
 	} catch {}
 }
 
