@@ -174,6 +174,10 @@ export async function openBomManager(): Promise<void> {
 	return;
 }
 
+export async function openDesignPulse(): Promise<void> {
+	return openBomManager();
+}
+
 export async function selfCheck(): Promise<void> {
 	const envInfo = (() => {
 		try {

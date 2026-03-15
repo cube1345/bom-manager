@@ -58,5 +58,6 @@ Prepend-ChangelogEntry -Path '.\CHANGELOG.md' -Version $Version -Changes $Change
 
 npm run build | Out-Host
 
-git add .\package.json .\extension.json .\CHANGELOG.md .\README.md .\src .\iframe .\config .\build\dist .\scripts .\.edaignore .\locales
+git add .\package.json .\extension.json .\CHANGELOG.md .\README.md .\src .\iframe .\config .\scripts .\.edaignore .\locales
+git add -f .\build\dist
 git commit -m $CommitMessage --no-verify | Out-Host
