@@ -904,6 +904,7 @@
 			: `<p class="empty-state">${e(t('切换到已打开的工程后点击“读取当前工程快照”，插件会读取当前工程、PCB 与板子信息。', 'Open a design and click "Load Snapshot" to read the current project, PCB and board context.'))}</p>`;
 		const buttons = [
 			`<button class="ghost-button" type="button" data-action="refresh-eda-snapshot" ${state.edaSnapshotLoading ? 'disabled' : ''}>${e(refreshLabel)}</button>`,
+			featureEnabled('enableReportsView') ? `<button class="ghost-button" type="button" data-action="generate-context-report">${e(t('生成报告', 'Generate Report'))}</button>` : '',
 			featureEnabled('enableReportsView') ? `<button class="ghost-button" type="button" data-action="view" data-view="reports">${e(t('查看报告', 'Open Reports'))}</button>` : '',
 			featureEnabled('enableExportHub') ? `<button class="ghost-button" type="button" data-action="view" data-view="exports">${e(t('制造导出', 'Open Exports'))}</button>` : '',
 			featureEnabled('enableProjectBatchImport')
