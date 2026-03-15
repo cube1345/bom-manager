@@ -1,7 +1,7 @@
 {
 	"name": "design-pulse",
-	"version": "0.1.10",
-	"description": "嘉立创 EDA 专业版工程快照、制造导出与 BOM 协作助手",
+	"version": "0.1.11",
+	"description": "嘉立创 EDA 专业版工程快照、制造导出与 BOM 协作工具",
 	"author": "JLCEDA <support@lceda.cn>",
 	"license": "Apache-2.0",
 	"homepage": "https://pro.lceda.cn/",
