@@ -855,6 +855,7 @@
 	function header() {
 		const actionButtons = [
 			`<button class="ghost-button" data-action="import">${e(t('导入', 'Import'))}</button>`,
+			featureEnabled('enableCanvasTools') ? `<button class="ghost-button" data-action="capture-canvas-current">${e(t('截图当前视图', 'Capture View'))}</button>` : '',
 			featureEnabled('enableReportsView') ? `<button class="ghost-button" data-action="view" data-view="reports">${e(t('工程报告', 'Reports'))}</button>` : '',
 			featureEnabled('enableExportHub') ? `<button class="ghost-button" data-action="view" data-view="exports">${e(t('导出中心', 'Export Hub'))}</button>` : '',
 			featureEnabled('enableCurrentPcbImport')
