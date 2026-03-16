@@ -1,43 +1,120 @@
 [简体中文](./README.md) | [English](./README.en.md) | [繁體中文](./README.zh-Hant.md) | [日本語](#) | [Русский](./README.ru.md)
 
-# pro-api-sdk
+# 使い方
 
-嘉立创EDA & EasyEDA Pro Edition は API 開発ツールを拡張します
+# 物料管理助手
 
-<a href="https://github.com/easyeda/pro-api-sdk" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/stars/easyeda/pro-api-sdk" alt="GitHub Repo Stars" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://github.com/easyeda/pro-api-sdk/issues" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/issues/easyeda/pro-api-sdk" alt="GitHub Issues" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://github.com/easyeda/pro-api-sdk" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/repo-size/easyeda/pro-api-sdk" alt="GitHub Repo Size" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://choosealicense.com/licenses/apache-2.0/" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/license/easyeda/pro-api-sdk" alt="GitHub License" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://www.npmjs.com/package/@jlceda/pro-api-types" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/npm/v/%40jlceda%2Fpro-api-types?label=pro-api-types" alt="NPM Version" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://www.npmjs.com/package/@jlceda/pro-api-types" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/npm/d18m/%40jlceda%2Fpro-api-types" alt="NPM Downloads" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>
+物料管理助手は、**嘉立创 EDA Pro** 向けの BOM・在庫管理拡張です。エディタ内で IFrame ウィンドウを開き、カテゴリ、部品、購買記録、プロジェクト、PCB、BOM を一元管理し、インポートとエクスポートにも対応します。
 
-> [!NOTE]
->
-> 詳細な開発ドキュメントについては、以下をご覧ください：[https://prodocs.easyeda.com/en/api/guide/](https://prodocs.easyeda.com/en/api/guide/)
+> 嘉立创 API ドキュメント: [https://prodocs.lceda.cn/cn/api/guide/invoke-apis.html](https://prodocs.lceda.cn/cn/api/guide/invoke-apis.html)
 
-## 開発に入る
+## 主な機能
 
-この開発ツールセットには、[EasyEDA Pro Edition](https://pro.easyeda.com/) 拡張パッケージを開発するためのすべての環境とツールが含まれており、Prettier と ESLint の推奨ルールが組み込まれています。
+- カテゴリ管理: 一級・二級カテゴリ辞書を管理します。
+- 部品管理: 型番、補足情報、備考、警告しきい値、PCB 需要統計、関連 PCB を管理します。
+- 購買記録: 各部品に対して、プラットフォーム、リンク、数量、単価、仕入先情報を保存できます。
+- プロジェクト / PCB / BOM: 1 つのプロジェクトに複数の PCB を紐づけられ、各 PCB ごとに独立した BOM を管理できます。
+- 購買リスト: プロジェクト単位または PCB 単位で不足リストを生成し、`JSON/CSV` で出力できます。
+- 現在の工程同期: アクティブな EDA 工程から BOM を取り込み、工程全体を一括同期できます。
+- 製造データ出力: `BOM / Gerber / Pick&Place / 3D / Netlist / Test Point` を出力できます。
+- キャンバスツール: 全体表示、選択領域キャプチャ、マーカー、スクリーンショット、履歴保存に対応します。
+- 設定: 言語切り替えとライト / ダークテーマ切り替えに対応します。
 
-1. プロジェクト [pro-api-sdk](https://github.com/easyeda/pro-api-sdk) リポジトリをローカル コンピューターにクローンします
+## 機能デモ
 
-    ```shell
-    git clone --depth=1 https://github.com/easyeda/pro-api-sdk.git
-    ```
+### 現在の工程データを取り込む
 
-2. 開発環境の初期化 (依存関係のインストール)
+メイン画面で「记录工程快照」をクリックすると、現在開いている工程情報を保存できます。
 
-    ```shell
-    npm install
-    ```
+![工程スナップショット](./images/image1.png)
 
-3. いくつかの変更を加えます...
+「导入当前PCB BOM」をクリックすると、現在の工程から部品情報を一括で取り込めます。
 
-4. 拡張機能パッケージをコンパイルする
+![現在の PCB BOM を取り込む](./images/image8.png)
 
-    ```shell
-    npm run build
-    ```
+### プロジェクトと PCB を作成する
 
-5. EasyEDA Pro Edition の `./build/dist/` の下に生成された拡張パッケージをインストールします
+嘉立创で作成したプロジェクト単位で在庫を整理できるため、現在の設計で必要な部品をすばやく見つけやすくなります。
+
+拡張内でプロジェクトと PCB を直接作成できます。
+
+![プロジェクトと PCB](./images/image2.png)
+
+### カテゴリと部品を作成する
+
+部品在庫は一級カテゴリと二級カテゴリで分類して管理できます。
+
+![カテゴリ追加](./images/image3.png)
+![部品追加](./images/image4.png)
+
+### データをエクスポートする
+
+現在の部品データをローカルへ書き出せます。別環境へ移行したい場合は、インポートでまとめて復元できます。
+
+![部品データのエクスポート](./images/image5.png)
+
+BOM 以外の製造関連データもワンクリックで出力できます。
+
+![製造データのエクスポート](./images/image6.png)
+
+### スクリーンショットとキャンバスツール
+
+現在のビュー、現在の図形、選択範囲に対するスクリーンショット機能を備えています。用途に応じて使い分けできます。
+
+工程スナップショットの保存にも対応しています。
+
+![スクリーンショット機能](./images/image7.png)
+
+## 使用手順
+
+1. 嘉立创 EDA Pro に `.eext` パッケージをインストールします。
+2. 上部メニューで `物料管理助手` を探し、`打开物料管理助手` をクリックします。
+3. 初回起動時に、デフォルトのデータベースが自動で初期化されます。
+
+## データ保存とバックアップ
+
+- データは `eda.sys_Storage` を通じて拡張のユーザー設定に保存されます。
+- 定期的に `导出 JSON` を実行してオフラインバックアップを取ることを推奨します。別の端末では `导入` で復元できます。
+
+## インポート形式
+
+### JSON
+
+- 全データベースのインポートに対応します。例: `{ types: [], components: [], projects: [], pcbs: [], stores: [] }`
+- 部品一覧のインポートにも対応します。例: `[{ typeName, model, auxInfo?, note?, warningThreshold?, records? }]` または `{ items: [...] }`
+
+### CSV
+
+- 部品一覧のみインポートできます。
+- 必須列: カテゴリ (`type/typeName/类型`) と型番 (`model/型号`)
+- 任意列: `auxInfo/辅助信息`、`note/备注`、`warningThreshold/预警阈值`、`platform/平台`、`link/链接`、`quantity/数量`、`pricePerUnit/单价`
+
+### XLSX
+
+- 本拡張が出力した `.xlsx` は自動判定して取り込みます。
+- 一般的な `.xlsx` の場合は、インポートマッピング画面でシートと列を選択してから取り込みます。
+
+## 開発とビルド
+
+動作環境: Node.js 20+
+
+```shell
+npm install
+npm run build
+```
+
+生成物は `build/dist/*.eext` に出力されます。
+
+エントリーファイル:
+
+- 拡張エントリー: [`src/index.ts`](./src/index.ts)
+- IFrame アプリ: [`iframe/src/app.ts`](./iframe/src/app.ts)
+
+## 既知の制限
+
+- 旧バイナリ形式の `.xls` 取り込みは未実装です。
+- 保存容量はホスト環境の制限を受けます。大きなデータセットは `JSON` を定期的に書き出して保管してください。
 
 ## オープンソースライセンス
 
-<a href="https://choosealicense.com/licenses/apache-2.0/" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/license/easyeda/pro-api-sdk" alt="GitHub License" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>
-
-この開発ツールグループは、[Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/) オープンソースライセンス契約を使用しており、このツールグループに基づいて開発された拡張パッケージの **機能説明部分** および **オープンソースリリースタイトル部分** の **嘉立创EDA**、**EasyEDA** 商標情報のみを使用することができます。
+本プロジェクトは Apache License 2.0 のもとで公開されています。

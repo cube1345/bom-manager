@@ -1,43 +1,120 @@
 [简体中文](./README.md) | [English](./README.en.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [Русский](#)
 
-# pro-api-sdk
+# Руководство по использованию
 
-嘉立创EDA & EasyEDA Pro Edition Расширьте возможности инструментов разработки API
+# 物料管理助手
 
-<a href="https://github.com/easyeda/pro-api-sdk" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/stars/easyeda/pro-api-sdk" alt="GitHub Repo Stars" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://github.com/easyeda/pro-api-sdk/issues" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/issues/easyeda/pro-api-sdk" alt="GitHub Issues" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://github.com/easyeda/pro-api-sdk" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/repo-size/easyeda/pro-api-sdk" alt="GitHub Repo Size" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://choosealicense.com/licenses/apache-2.0/" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/license/easyeda/pro-api-sdk" alt="GitHub License" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://www.npmjs.com/package/@jlceda/pro-api-types" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/npm/v/%40jlceda%2Fpro-api-types?label=pro-api-types" alt="NPM Version" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://www.npmjs.com/package/@jlceda/pro-api-types" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/npm/d18m/%40jlceda%2Fpro-api-types" alt="NPM Downloads" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>
+Material Management Assistant - это расширение для **JLCEDA Pro** для работы с BOM и складскими данными. Расширение открывает встроенное окно IFrame в редакторе и позволяет в одном месте управлять категориями, компонентами, закупками, проектами, PCB и BOM, а также выполнять импорт и экспорт данных.
 
-> [!NOTE]
->
-> Для получения подробной документации по разработке, пожалуйста, посетите: [https://prodocs.easyeda.com/en/api/guide/](https://prodocs.easyeda.com/en/api/guide/)
+> Справка по API JLCEDA: [https://prodocs.lceda.cn/cn/api/guide/invoke-apis.html](https://prodocs.lceda.cn/cn/api/guide/invoke-apis.html)
 
-## Войти в разработку
+## Возможности
 
-Этот набор инструментов разработки содержит все среды и инструменты для разработки пакета расширений [EasyEDA Pro Edition](https://pro.easyeda.com/), а также имеет встроенные рекомендуемые правила для Prettier и ESLint.
+- Управление категориями: поддержка словарей категорий первого и второго уровня.
+- Управление компонентами: модель, дополнительная информация, заметки, порог предупреждения, статистика потребности PCB и связанные PCB.
+- Записи закупок: для каждого компонента можно хранить площадку, ссылку, количество, цену за единицу и поставщика.
+- Проект / PCB / BOM: один проект может содержать несколько PCB, и каждая PCB имеет собственный список BOM.
+- Списки закупок: формирование дефицитных позиций по проекту или по PCB с экспортом в `JSON/CSV`.
+- Синхронизация текущего проекта: импорт BOM из активного проекта EDA или пакетная синхронизация всего проекта.
+- Экспорт производства: вывод `BOM / Gerber / Pick&Place / 3D / Netlist / Test Point`.
+- Инструменты холста: подгонка вида, снимки выделения, маркеры, скриншоты и история.
+- Настройки: переключение языка и светлой / тёмной темы.
 
-1. Клонируйте репозиторий проекта [pro-api-sdk](https://github.com/easyeda/pro-api-sdk) на свой локальный компьютер
+## Демонстрация функций
 
-    ```shell
-    git clone --depth=1 https://github.com/easyeda/pro-api-sdk.git
-    ```
+### Импорт данных текущего проекта
 
-2. Инициализация среды разработки (установка зависимостей)
+На главной странице нажмите «记录工程快照», чтобы сохранить контекст текущего открытого проекта.
 
-    ```shell
-    npm install
-    ```
+![Снимок проекта](./images/image1.png)
 
-3. Внесите несколько изменений...
+Нажмите «导入当前PCB BOM», чтобы пакетно импортировать данные компонентов из текущего проекта.
 
-4. Компиляция пакета расширения
+![Импорт текущего PCB BOM](./images/image8.png)
 
-    ```shell
-    npm run build
-    ```
+### Создание проектов и PCB
 
-5. Установите пакет расширения, сгенерированный в разделе `./build/dist/` в EasyEDA Pro Edition
+Расширение помогает вести учёт компонентов по проектам JLCEDA, чтобы быстрее находить нужные позиции для текущей разработки.
 
-## Лицензия с открытым исходным кодом
+Создавать проекты и PCB можно прямо внутри расширения.
 
-<a href="https://choosealicense.com/licenses/apache-2.0/" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/license/easyeda/pro-api-sdk" alt="GitHub License" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>
+![Проекты и PCB](./images/image2.png)
 
-Эта группа инструментов разработки использует лицензионное соглашение с открытым исходным кодом [Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/), и вы можете использовать только информацию о товарном знаке **嘉立创EDA**, **EasyEDA** для **части описания функции** и **части названия выпуска с открытым исходным кодом** пакета расширений, разработанного на основе этой группы инструментов.
+### Создание категорий и компонентов
+
+Вы можете управлять складом компонентов и классифицировать позиции по категориям первого и второго уровня.
+
+![Создание категории](./images/image3.png)
+![Создание компонента](./images/image4.png)
+
+### Экспорт данных
+
+Текущие данные по компонентам можно экспортировать на локальный компьютер. Также поддерживается импорт для быстрого переноса данных между средами.
+
+![Экспорт данных компонентов](./images/image5.png)
+
+Помимо BOM, поддерживается экспорт и других производственных данных.
+
+![Экспорт производственных данных](./images/image6.png)
+
+### Скриншоты и инструменты холста
+
+Расширение поддерживает снимки текущего вида, текущих объектов и выделенной области. Можно выбирать подходящий режим под задачу.
+
+Также поддерживается сохранение снимков проекта для последующего просмотра.
+
+![Инструменты скриншотов](./images/image7.png)
+
+## Как использовать
+
+1. Установите пакет `.eext` в JLCEDA Pro.
+2. В верхнем меню найдите `物料管理助手` и нажмите `打开物料管理助手`.
+3. При первом запуске расширение автоматически создаст базу данных по умолчанию.
+
+## Хранение данных и резервное копирование
+
+- Данные хранятся в пользовательской конфигурации расширения через `eda.sys_Storage`.
+- Рекомендуется регулярно выполнять `导出 JSON` для офлайн-резервного копирования. Для переноса на другое устройство используйте `导入`.
+
+## Форматы импорта
+
+### JSON
+
+- Поддерживается полный импорт базы данных, например: `{ types: [], components: [], projects: [], pcbs: [], stores: [] }`.
+- Также поддерживается импорт списка компонентов, например: `[{ typeName, model, auxInfo?, note?, warningThreshold?, records? }]` или `{ items: [...] }`.
+
+### CSV
+
+- Поддерживается только импорт списка компонентов.
+- Обязательные столбцы: категория (`type/typeName/类型`) и модель (`model/型号`).
+- Необязательные столбцы: `auxInfo/辅助信息`, `note/备注`, `warningThreshold/预警阈值`, `platform/平台`, `link/链接`, `quantity/数量`, `pricePerUnit/单价`.
+
+### XLSX
+
+- Если файл `.xlsx` был экспортирован этим расширением, он определяется и импортируется автоматически.
+- Для обычного `.xlsx` откроется окно сопоставления импорта, где нужно выбрать лист и связать столбцы.
+
+## Разработка и сборка
+
+Среда выполнения: Node.js 20+
+
+```shell
+npm install
+npm run build
+```
+
+Сборочные артефакты создаются в `build/dist/*.eext`.
+
+Точки входа:
+
+- Точка входа расширения: [`src/index.ts`](./src/index.ts)
+- Приложение IFrame: [`iframe/src/app.ts`](./iframe/src/app.ts)
+
+## Известные ограничения
+
+- Импорт старого бинарного формата `.xls` пока не реализован.
+- Объём хранилища зависит от ограничений хоста. Для больших наборов данных регулярно сохраняйте архивную копию в `JSON`.
+
+## Лицензия
+
+Проект распространяется по лицензии Apache License 2.0.

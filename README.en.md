@@ -1,43 +1,120 @@
 [简体中文](./README.md) | [English](#) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [Русский](./README.ru.md)
 
-# pro-api-sdk
+# Usage Guide
 
-JLCEDA & EasyEDA Pro Extension API Development Kit
+# Material Management Assistant
 
-<a href="https://github.com/easyeda/pro-api-sdk" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/stars/easyeda/pro-api-sdk" alt="GitHub Repo Stars" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://github.com/easyeda/pro-api-sdk/issues" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/issues/easyeda/pro-api-sdk" alt="GitHub Issues" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://github.com/easyeda/pro-api-sdk" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/repo-size/easyeda/pro-api-sdk" alt="GitHub Repo Size" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://choosealicense.com/licenses/apache-2.0/" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/license/easyeda/pro-api-sdk" alt="GitHub License" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://www.npmjs.com/package/@jlceda/pro-api-types" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/npm/v/%40jlceda%2Fpro-api-types?label=pro-api-types" alt="NPM Version" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>&nbsp;<a href="https://www.npmjs.com/package/@jlceda/pro-api-types" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/npm/d18m/%40jlceda%2Fpro-api-types" alt="NPM Downloads" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>
+Material Management Assistant is a BOM and inventory extension for **JLCEDA Pro**. It opens an inline IFrame window inside the editor and helps hardware teams manage categories, components, purchase records, projects, PCBs, and BOMs in one place, with import and export support.
 
-> [!NOTE]
->
-> For more information on the development of EasyEDA Pro Extension, please visit：[https://prodocs.easyeda.com/en/api/guide/](https://prodocs.easyeda.com/en/api/guide/)
+> JLCEDA API reference: [https://prodocs.lceda.cn/cn/api/guide/invoke-apis.html](https://prodocs.lceda.cn/cn/api/guide/invoke-apis.html)
 
-## Enter Development
+## Features
 
-This development tool set contains all the environments and tools for developing the [EasyEDA Pro Edition](https://pro.easyeda.com/) extension package, and has built-in recommended rules for Prettier and ESLint.
+- Category management: maintain primary and secondary category dictionaries.
+- Component management: maintain model, auxiliary info, notes, warning threshold, PCB demand stats, and related PCBs.
+- Purchase records: store platform, link, quantity, unit price, and supplier information for each component.
+- Project / PCB / BOM: each project can contain multiple PCBs, and each PCB keeps its own BOM list.
+- Purchase lists: generate shortage lists by project or PCB and export them as `JSON/CSV`.
+- Current project sync: import BOM data from the active EDA project or sync the whole project in batch.
+- Manufacturing export: export `BOM / Gerber / Pick&Place / 3D / Netlist / Test Point`.
+- Canvas tools: fit view, selection capture, markers, screenshots, and history records.
+- Preferences: switch language and light/dark theme.
 
-1. Clone the [pro-api-sdk](https://github.com/easyeda/pro-api-sdk) project repository to your local computer
+## Feature Demo
 
-    ```shell
-    git clone --depth=1 https://github.com/easyeda/pro-api-sdk.git
-    ```
+### Import Your Current Project Data
 
-2. Initializing the development environment (installing dependencies)
+On the main page, click "Record Project Snapshot" to save the current project context.
 
-    ```shell
-    npm install
-    ```
+![Record Project Snapshot](./images/image1.png)
 
-3. Make your changes ...
+Click "Import Current PCB BOM" to batch import component data from the current project.
 
-4. Compile the extension package
+![Import Current PCB BOM](./images/image8.png)
 
-    ```shell
-    npm run build
-    ```
+### Create Projects and PCB Entries
 
-5. Install the extension package generated under `./build/dist/` in EasyEDA Pro Edition
+You can organize inventory around projects created in JLCEDA, making it easier to locate the components you need for the current design.
 
-## Open-source License
+You can create projects and PCB entries directly in the extension.
 
-<a href="https://choosealicense.com/licenses/apache-2.0/" style="vertical-align: inherit;" target="_blank"><img src="https://img.shields.io/github/license/easyeda/pro-api-sdk" alt="GitHub License" class="not-medium-zoom-image" style="display: inline; vertical-align: inherit;" /></a>
+![Projects and PCB Entries](./images/image2.png)
 
-This development tool uses the [Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/) open source license agreement. You can only use the **嘉立创EDA** and **EasyEDA** trademark information for the **function description part** and **open source release title part** of the extension package developed based on this tool.
+### Create Categories and Components
+
+The extension lets you manage component inventory with primary and secondary categories for clearer classification.
+
+![Create Categories](./images/image3.png)
+![Create Components](./images/image4.png)
+
+### Export Data
+
+You can export current component data to your local computer, and import data back when you need to migrate inventory records quickly.
+
+![Export Component Data](./images/image5.png)
+
+Besides BOM data, the extension also supports one-click export for other manufacturing outputs.
+
+![Export Manufacturing Data](./images/image6.png)
+
+### Screenshots and Canvas Tools
+
+The extension includes screenshot tools for the current view, current objects, and selected area. You can capture what you need in different ways.
+
+It also supports saving project snapshots for later review.
+
+![Screenshot Tools](./images/image7.png)
+
+## How to Use
+
+1. Install the `.eext` package in JLCEDA Pro.
+2. Find `物料管理助手` in the top menu and click `打开物料管理助手`.
+3. On first launch, the extension initializes a default database automatically.
+
+## Data Storage and Backup
+
+- Extension data is stored in user configuration through `eda.sys_Storage`.
+- It is recommended to export `JSON` regularly for offline backup. Use `Import` to restore data on another device.
+
+## Import Formats
+
+### JSON
+
+- Full database import is supported, for example: `{ types: [], components: [], projects: [], pcbs: [], stores: [] }`.
+- Component list import is also supported, for example: `[{ typeName, model, auxInfo?, note?, warningThreshold?, records? }]` or `{ items: [...] }`.
+
+### CSV
+
+- Only component list import is supported.
+- Required columns: category (`type/typeName/类型`) and model (`model/型号`).
+- Optional columns: `auxInfo/辅助信息`, `note/备注`, `warningThreshold/预警阈值`, `platform/平台`, `link/链接`, `quantity/数量`, `pricePerUnit/单价`.
+
+### XLSX
+
+- Files exported by this extension are detected and imported automatically.
+- For a general `.xlsx`, the extension opens an import mapping dialog so you can choose the sheet and map the columns before import.
+
+## Development and Build
+
+Runtime: Node.js 20+
+
+```shell
+npm install
+npm run build
+```
+
+Build artifacts are generated in `build/dist/*.eext`.
+
+Entry files:
+
+- Extension entry: [`src/index.ts`](./src/index.ts)
+- IFrame app: [`iframe/src/app.ts`](./iframe/src/app.ts)
+
+## Known Limitations
+
+- Legacy binary `.xls` import is not implemented yet.
+- Extension storage capacity depends on the host environment. For large datasets, export `JSON` regularly for archival backup.
+
+## Open Source License
+
+This project is released under Apache License 2.0.
